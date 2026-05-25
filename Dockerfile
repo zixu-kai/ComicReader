@@ -1,23 +1,23 @@
 FROM node:20-alpine AS web-builder
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json ./
 COPY web/package.json ./web/
 COPY shared/package.json ./shared/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 COPY web/ ./web/
 COPY shared/ ./shared/
 RUN pnpm --filter web build
 
 FROM node:20-alpine AS server-builder
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 COPY server/ ./server/
 COPY shared/ ./shared/
 RUN pnpm --filter server build
@@ -25,12 +25,12 @@ RUN pnpm --filter server build
 FROM node:20-alpine AS runtime
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add --no-cache vips vips-dev python3 make g++ su-exec
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
-RUN pnpm install --frozen-lockfile --prod
+RUN pnpm install --no-frozen-lockfile --prod
 RUN npm rebuild sharp @libsql/client
 RUN apk del vips-dev python3 make g++
 COPY --from=server-builder /app/server/dist ./server/dist
