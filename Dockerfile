@@ -1,6 +1,6 @@
 FROM node:22-alpine AS web-builder
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-RUN corepack enable
+RUN npm install -g pnpm@11.1.2
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json ./
 COPY web/package.json ./web/
@@ -12,7 +12,7 @@ RUN pnpm --filter web build
 
 FROM node:22-alpine AS server-builder
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-RUN corepack enable
+RUN npm install -g pnpm@11.1.2
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json ./
 COPY server/package.json ./server/
@@ -25,7 +25,7 @@ RUN pnpm --filter server build
 FROM node:22-alpine AS runtime
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add --no-cache vips vips-dev python3 make g++ su-exec
-RUN corepack enable
+RUN npm install -g pnpm@11.1.2
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json ./
 COPY server/package.json ./server/
