@@ -1,4 +1,4 @@
-FROM node:20-alpine AS web-builder
+FROM node:22-alpine AS web-builder
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN corepack enable
 WORKDIR /app
@@ -10,7 +10,7 @@ COPY web/ ./web/
 COPY shared/ ./shared/
 RUN pnpm --filter web build
 
-FROM node:20-alpine AS server-builder
+FROM node:22-alpine AS server-builder
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN corepack enable
 WORKDIR /app
@@ -22,7 +22,7 @@ COPY server/ ./server/
 COPY shared/ ./shared/
 RUN pnpm --filter server build
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add --no-cache vips vips-dev python3 make g++ su-exec
 RUN corepack enable
