@@ -1,0 +1,1 @@
+{"name":"entry","version":"1.0.0","modelVersion":"6.1.1","description":"ComicReader entry module","main":"","author":"","license":"","dependencies":{"@ohos/axios":"^2.0.0"}}

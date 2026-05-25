@@ -1,0 +1,50 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\asus\\.ohos\\config\\default_harmony-native_R2tHoRYOjbhhKzga6bF7eakJBgF5W3eOUxTmeY1x3hg=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B85799F54F990D3088D40D0411CDA0A8F1BEB4E39F547E76362D897A6D4B040BE97BE8463CF81B6",
+          "profile": "C:\\Users\\asus\\.ohos\\config\\default_harmony-native_R2tHoRYOjbhhKzga6bF7eakJBgF5W3eOUxTmeY1x3hg=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\asus\\.ohos\\config\\default_harmony-native_R2tHoRYOjbhhKzga6bF7eakJBgF5W3eOUxTmeY1x3hg=.p12",
+          "storePassword": "0000001B08E2097C74939EF8DC5596472018C740410DC3CA8AAD391F5A7D11ED1ACB8DE7EE0E2FFB4334D1"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "5.0.0(12)",
+        "targetSdkVersion": "6.1.1(24)",
+        "runtimeOS": "HarmonyOS"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

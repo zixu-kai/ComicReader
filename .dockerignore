@@ -1,0 +1,17 @@
+node_modules
+dist
+*.md
+release/
+.git
+.github
+data/
+comics/
+books/
+scripts/
+*.bat
+*.exe
+.DS_Store
+Thumbs.db
+.env
+*.db
+*.db-journal

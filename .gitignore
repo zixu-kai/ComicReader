@@ -1,0 +1,14 @@
+node_modules
+dist
+target
+.env
+*.db
+*.db-journal
+data/
+covers/
+release/
+参考/
+scripts/
+*.tar
+.DS_Store
+Thumbs.db

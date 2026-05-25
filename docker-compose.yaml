@@ -1,0 +1,22 @@
+services:
+  ownshelf:
+    image: ghcr.io/zixu-kai/ComicReader:latest
+    container_name: ownshelf
+    ports:
+      - "7788:7788"
+    volumes:
+      - ./data:/app/data
+      - /volume1/comics:/comics:ro
+      - /volume1/books:/books:ro
+    environment:
+      - COMICS_DIR=/comics
+      - BOOKS_DIR=/books
+      - DB_PATH=/app/data/ownshelf.db
+      - COVERS_DIR=/app/data/covers
+      - HOST=0.0.0.0
+      - PORT=7788
+      - JWT_SECRET=change-me-in-production
+      - PUID=1000
+      - PGID=100
+      - NODE_ENV=production
+    restart: unless-stopped

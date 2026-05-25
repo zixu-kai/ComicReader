@@ -1,0 +1,254 @@
+Ôr@Ÿªassertions¤code´customTransformCache¬dependencies¢id¤meta±moduleSideEffects¬originalCode±originalSourcemap«resolvedIds®sourcemapChainµsyntheticNamedExportsµtransformDependencies®transformFiles¨cacheAstÔrAÚó/*
+ * The MIT License (MIT)
+ * Copyright (C) 2023 Huawei Device Co., Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ */
+'use strict';
+
+import buildURL from '../../../lib/helpers/buildURL.js'
+import settle from "../../../lib/core/settle"
+import AxiosError from '../../../lib/core/AxiosError'
+import {setOptions} from './index'
+import CanceledError from '../../cancel/CanceledError';
+
+export default (httpConfig, resolve, reject) => {
+    const { httpRequest, fullPath, config } = httpConfig;
+    let options = setOptions(config);
+    try {
+        if (options.interceptorChain) {
+            let interceptorChainApplied = options.interceptorChain.apply(httpRequest)
+            if (!interceptorChainApplied) {
+                reject(new AxiosError("interceptorChain apply failed"), undefined, config, httpRequest, httpRequest)
+            }
+        }
+    } catch (err) {
+        reject(new AxiosError(JSON.stringify(err), err.code, config, httpRequest, httpRequest));
+    }
+
+    let abort = (reason) => {
+        let error = !reason || reason.type ? new CanceledError(null, config, httpRequest) : reason;
+        reject(error);
+        onFinished();
+    };
+    let onFinished = () => {
+        if (config.signal) {
+            config.signal.removeEventListener('abort', abort);
+        }
+        httpRequest.destroy();
+    };
+    if (config.signal) {
+        config.signal.aborted ? abort() : config.signal.addEventListener('abort', abort);
+    }
+    httpRequest.request(
+        // å¡«å†™httpè¯·æ±‚çš„urlåœ°å€ï¼Œå¯ä»¥å¸¦å‚æ•°ä¹Ÿå¯ä»¥ä¸å¸¦å‚æ•°ã€‚URLåœ°å€éœ€è¦å¼€å‘è€…è‡ªå®šä¹‰ã€‚GETè¯·æ±‚çš„å‚æ•°å¯ä»¥åœ¨extraDataä¸­æŒ‡å®š
+        buildURL(fullPath, config.params, config.paramsSerializer), options
+        , (err, data) => {
+        if (!err) {
+            let response = {
+                data: data && data.result,
+                status: data && data.responseCode,
+                statusText: '',
+                headers: data && data.header,
+                config: config,
+                request: httpRequest,
+                performanceTiming: data && data.performanceTiming
+            };
+            settle(function _resolve(value) {
+                resolve(value);
+            }, function _reject(err) {
+                reject(err);
+            }, response);
+        } else {
+            // å‘é€è¯·æ±‚ï¼šè¿”å›æ•°æ®å¤§äºè®¾ç½®çš„maxContentLengthæ—¶ä¸åŸåº“ä¿æŒä¸€è‡´
+            if(err.message==='Failed writing received data to disk/application') {
+                return reject(new AxiosError(
+                    'maxContentLength size of ' + config.maxContentLength + ' exceeded',
+                    AxiosError.ERR_BAD_RESPONSE,
+                    config,
+                    httpRequest
+                ));
+            }
+            // æ— ç½‘ç»œæˆ–è€…urlé”™è¯¯
+            reject(new AxiosError(JSON.stringify(err), err.code, config, httpRequest, httpRequest));
+        }
+        onFinished();
+    });
+}Â•Ù˜D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\helpers\buildURL.jsÙ“D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\core\settle.jsÙ—D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\core\AxiosError.jsÙ›D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\index.jsÙœD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\cancel\CanceledError.jsÙšD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\http.jsÔrB˜±isLocalDependency¯isNodeEntryFile§pkgPath§pkgNameªpkgVersion±belongProjectPath±dependencyPkgInfo¨commonjsÂÂÙhD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios«@ohos/axios¦2.2.10Ù-D:\GongZuo\ComicReader\clients\harmony-nativeÔrC’§pkgNameªpkgVersion«@ohos/axios¦2.2.10ÔrD’°hasDefaultExportªisCommonJSÃÂÃÚó/*
+ * The MIT License (MIT)
+ * Copyright (C) 2023 Huawei Device Co., Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ */
+'use strict';
+
+import buildURL from '../../../lib/helpers/buildURL.js'
+import settle from "../../../lib/core/settle"
+import AxiosError from '../../../lib/core/AxiosError'
+import {setOptions} from './index'
+import CanceledError from '../../cancel/CanceledError';
+
+export default (httpConfig, resolve, reject) => {
+    const { httpRequest, fullPath, config } = httpConfig;
+    let options = setOptions(config);
+    try {
+        if (options.interceptorChain) {
+            let interceptorChainApplied = options.interceptorChain.apply(httpRequest)
+            if (!interceptorChainApplied) {
+                reject(new AxiosError("interceptorChain apply failed"), undefined, config, httpRequest, httpRequest)
+            }
+        }
+    } catch (err) {
+        reject(new AxiosError(JSON.stringify(err), err.code, config, httpRequest, httpRequest));
+    }
+
+    let abort = (reason) => {
+        let error = !reason || reason.type ? new CanceledError(null, config, httpRequest) : reason;
+        reject(error);
+        onFinished();
+    };
+    let onFinished = () => {
+        if (config.signal) {
+            config.signal.removeEventListener('abort', abort);
+        }
+        httpRequest.destroy();
+    };
+    if (config.signal) {
+        config.signal.aborted ? abort() : config.signal.addEventListener('abort', abort);
+    }
+    httpRequest.request(
+        // å¡«å†™httpè¯·æ±‚çš„urlåœ°å€ï¼Œå¯ä»¥å¸¦å‚æ•°ä¹Ÿå¯ä»¥ä¸å¸¦å‚æ•°ã€‚URLåœ°å€éœ€è¦å¼€å‘è€…è‡ªå®šä¹‰ã€‚GETè¯·æ±‚çš„å‚æ•°å¯ä»¥åœ¨extraDataä¸­æŒ‡å®š
+        buildURL(fullPath, config.params, config.paramsSerializer), options
+        , (err, data) => {
+        if (!err) {
+            let response = {
+                data: data && data.result,
+                status: data && data.responseCode,
+                statusText: '',
+                headers: data && data.header,
+                config: config,
+                request: httpRequest,
+                performanceTiming: data && data.performanceTiming
+            };
+            settle(function _resolve(value) {
+                resolve(value);
+            }, function _reject(err) {
+                reject(err);
+            }, response);
+        } else {
+            // å‘é€è¯·æ±‚ï¼šè¿”å›æ•°æ®å¤§äºè®¾ç½®çš„maxContentLengthæ—¶ä¸åŸåº“ä¿æŒä¸€è‡´
+            if(err.message==='Failed writing received data to disk/application') {
+                return reject(new AxiosError(
+                    'maxContentLength size of ' + config.maxContentLength + ' exceeded',
+                    AxiosError.ERR_BAD_RESPONSE,
+                    config,
+                    httpRequest
+                ));
+            }
+            // æ— ç½‘ç»œæˆ–è€…urlé”™è¯¯
+            reject(new AxiosError(JSON.stringify(err), err.code, config, httpRequest, httpRequest));
+        }
+        onFinished();
+    });
+}ÔrE•§version¨mappings¥names§sources®sourcesContentÜ U‘”    ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”  	 ‘”  
+ ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”    ‘”  ! ‘”  " ‘”  # ‘”  $ ‘”  % ‘”  & ‘”  ' ‘”  ( ‘”  ) ‘”  * ‘”  + ‘”  , ‘”  - ‘”  . ‘”  / ‘”  0 ‘”  1 ‘”  2 ‘”  3 ‘”  4 ‘”  5 ‘”  6 ‘”  7 ‘”  8 ‘”  9 ‘”  : ‘”  ; ‘”  < ‘”  = ‘”  > ‘”  ? ‘”  Ì@ ‘”  ÌA ‘”  ÌB ‘”  ÌC ‘”  ÌD ‘”  ÌE ‘”  ÌF ‘”  ÌG ‘”  ÌH ‘”  ÌI ‘”  ÌJ ‘”  ÌK ‘”  ÌL ‘”  ÌM ‘”  ÌN ‘”  ÌO ‘”  ÌP ‘”  ÌQ ‘”  ÌR ‘”  ÌS ‘”  ÌT ‘ÙšD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\http.js‘Úó/*
+ * The MIT License (MIT)
+ * Copyright (C) 2023 Huawei Device Co., Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ */
+'use strict';
+
+import buildURL from '../../../lib/helpers/buildURL.js'
+import settle from "../../../lib/core/settle"
+import AxiosError from '../../../lib/core/AxiosError'
+import {setOptions} from './index'
+import CanceledError from '../../cancel/CanceledError';
+
+export default (httpConfig, resolve, reject) => {
+    const { httpRequest, fullPath, config } = httpConfig;
+    let options = setOptions(config);
+    try {
+        if (options.interceptorChain) {
+            let interceptorChainApplied = options.interceptorChain.apply(httpRequest)
+            if (!interceptorChainApplied) {
+                reject(new AxiosError("interceptorChain apply failed"), undefined, config, httpRequest, httpRequest)
+            }
+        }
+    } catch (err) {
+        reject(new AxiosError(JSON.stringify(err), err.code, config, httpRequest, httpRequest));
+    }
+
+    let abort = (reason) => {
+        let error = !reason || reason.type ? new CanceledError(null, config, httpRequest) : reason;
+        reject(error);
+        onFinished();
+    };
+    let onFinished = () => {
+        if (config.signal) {
+            config.signal.removeEventListener('abort', abort);
+        }
+        httpRequest.destroy();
+    };
+    if (config.signal) {
+        config.signal.aborted ? abort() : config.signal.addEventListener('abort', abort);
+    }
+    httpRequest.request(
+        // å¡«å†™httpè¯·æ±‚çš„urlåœ°å€ï¼Œå¯ä»¥å¸¦å‚æ•°ä¹Ÿå¯ä»¥ä¸å¸¦å‚æ•°ã€‚URLåœ°å€éœ€è¦å¼€å‘è€…è‡ªå®šä¹‰ã€‚GETè¯·æ±‚çš„å‚æ•°å¯ä»¥åœ¨extraDataä¸­æŒ‡å®š
+        buildURL(fullPath, config.params, config.paramsSerializer), options
+        , (err, data) => {
+        if (!err) {
+            let response = {
+                data: data && data.result,
+                status: data && data.responseCode,
+                statusText: '',
+                headers: data && data.header,
+                config: config,
+                request: httpRequest,
+                performanceTiming: data && data.performanceTiming
+            };
+            settle(function _resolve(value) {
+                resolve(value);
+            }, function _reject(err) {
+                reject(err);
+            }, response);
+        } else {
+            // å‘é€è¯·æ±‚ï¼šè¿”å›æ•°æ®å¤§äºè®¾ç½®çš„maxContentLengthæ—¶ä¸åŸåº“ä¿æŒä¸€è‡´
+            if(err.message==='Failed writing received data to disk/application') {
+                return reject(new AxiosError(
+                    'maxContentLength size of ' + config.maxContentLength + ' exceeded',
+                    AxiosError.ERR_BAD_RESPONSE,
+                    config,
+                    httpRequest
+                ));
+            }
+            // æ— ç½‘ç»œæˆ–è€…urlé”™è¯¯
+            reject(new AxiosError(JSON.stringify(err), err.code, config, httpRequest, httpRequest));
+        }
+        onFinished();
+    });
+}ÔrF•Ù ../../../lib/helpers/buildURL.js¼../../../lib/core/AxiosError§./indexº../../cancel/CanceledError¸../../../lib/core/settleÔrG—ªassertions¨external¢id¤meta±moduleSideEffectsªresolvedByµsyntheticNamedExportsAÂÙ˜D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\helpers\buildURL.jsAÃªoh-resolveÂGAÂÙ—D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\core\AxiosError.jsAÃªoh-resolveÂGAÂÙ›D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\index.jsAÃªoh-resolveÂGAÂÙœD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\cancel\CanceledError.jsAÃªoh-resolveÂGAÂÙ“D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\core\settle.jsAÃªoh-resolveÂ‘ÔrH’§missing¦pluginÃ¦genAbcÂÔ  ÔrI”²dynamicImportCache¹exportAllDeclarationCache»exportNamedDeclarationCache«importCache•ÔrJ•¤type¥start£endªspecifiers¦source±ImportDeclarationÍ»Íò‘ÔrK”¤type¥start£end¥local¶ImportDefaultSpecifierÍÂÍÊÔrL”¤type¥start£end¤nameªIdentifierÍÂÍÊ¨buildURLÔrM•¤type¥start£end¥value£raw§LiteralÍĞÍòÙ ../../../lib/helpers/buildURL.jsÙ"'../../../lib/helpers/buildURL.js'J±ImportDeclarationÍôÍ!‘K¶ImportDefaultSpecifierÍûÍLªIdentifierÍûÍ¦settleM§LiteralÍÍ!¸../../../lib/core/settleº"../../../lib/core/settle"J±ImportDeclarationÍ#ÍX‘K¶ImportDefaultSpecifierÍ*Í4LªIdentifierÍ*Í4ªAxiosErrorM§LiteralÍ:ÍX¼../../../lib/core/AxiosError¾'../../../lib/core/AxiosError'J±ImportDeclarationÍZÍ|‘ÔrN•¤type¥start£end¨imported¥local¯ImportSpecifierÍbÍlLªIdentifierÍbÍlªsetOptionsLªIdentifierÍbÍlªsetOptionsM§LiteralÍsÍ|§./index©'./index'J±ImportDeclarationÍ~Íµ‘K¶ImportDefaultSpecifierÍ…Í’LªIdentifierÍ…Í’­CanceledErrorM§LiteralÍ˜Í´º../../cancel/CanceledError¼'../../cancel/CanceledError'

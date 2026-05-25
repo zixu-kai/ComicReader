@@ -1,0 +1,1014 @@
+Ôr@Ÿªassertions¤code´customTransformCache¬dependencies¢id¤meta±moduleSideEffects¬originalCode±originalSourcemap«resolvedIds®sourcemapChainµsyntheticNamedExportsµtransformDependencies®transformFiles¨cacheAstÔrAÚ0í/*
+ * The MIT License (MIT)
+ * Copyright (C) 2023 Huawei Device Co., Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ */
+
+import http from './http.js'
+import download from './download.js'
+import upload from './upload.js'
+import fs from '@ohos.file.fs';
+import utils from '../../utils';
+import buffer from '@ohos.buffer';
+import _http from '@ohos.net.http';
+import FormData from '../../env/classes/FormData.js'
+import AxiosError from '../../../lib/core/AxiosError'
+import buildFullPath from '../../../lib/core/buildFullPath';
+import { LogUtil } from '../../LogUtil'
+import deviceInfo from '@ohos.deviceInfo';
+
+const isXHRAdapterSupported = true
+const part = '/data/storage/';
+
+export default isXHRAdapterSupported && function (config) {
+    return new Promise(function (resolve, reject) {
+        const httpConfig = setHttpConfig(config, reject);
+        if (config.data && config.data instanceof FormData && (config.method.toUpperCase() === 'POST' || config.method.toUpperCase() === 'PUT')) {
+            // ä¸Šä¼ 
+            LogUtil.info('upload in: %s', config.method.toUpperCase());
+            upload(httpConfig, resolve, reject);
+        } else if (config.filePath) {
+            // ä¸‹è½½ã€‚å¦‚æœæ–‡ä»¶å·²å­˜åœ¨ï¼Œåˆ™ç›´æ¥è¿”å›é”™è¯¯ã€‚
+            LogUtil.info('download file : %s', config.filePath);
+            try {
+                let path = '';
+                let cacheDir = '';
+                let filePath = config.filePath;
+                if(config.context) {
+                    cacheDir = config.context.cacheDir;
+                    path = config.filePath.indexOf(cacheDir) > -1 ?  filePath : `${cacheDir}/${filePath}`;
+                } else {
+                    if(filePath.indexOf(part)===-1) {
+                        return reject(new AxiosError('If there is no context, the filePath must be a complete fd path!', AxiosError.ERR_BAD_OPTION, null, null, null));
+                    }
+                }
+                let res = fs.accessSync(path);
+                if(!res){
+                    download(httpConfig, resolve, reject);
+                }else {
+                    reject(new AxiosError('The file already exist, please delete the file first!', AxiosError.ERR_BAD_OPTION, null, null, null));
+                }
+            } catch (err) {
+                LogUtil.error('isXHRAdapterSupported error: %s', err.message);
+                reject(new AxiosError(err, AxiosError.ERR_BAD_OPTION, null, null, null));
+            }
+        } else {
+            // å‘é€è¯·æ±‚
+            LogUtil.info('http request : %s', config.method.toUpperCase());
+            http(httpConfig, resolve, reject);
+        }
+    })
+}
+/**
+ * @param data éœ€è¦è®¡ç®—å­—èŠ‚çš„æ•°æ®
+ */
+const calculateLength = (data) => {
+    let len = 0;
+    if (data) {
+        if (typeof data === 'string') {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯å­—ç¬¦ä¸²ï¼Œç›´æ¥è®¡ç®—é•¿åº¦
+            len = buffer.byteLength(data, 'utf8');
+        } else if (buffer.isBuffer(data)) {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯Bufferå¯¹è±¡ï¼Œç›´æ¥è·å–é•¿åº¦
+            len = data.length;
+        } else if (data instanceof ArrayBuffer) {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯ArrayBufferå¯¹è±¡ï¼Œç›´æ¥è·å–é•¿åº¦
+            len = data.byteLength;
+        } else if (typeof data === 'number') {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯numberï¼Œç›´æ¥èµ‹å€¼
+            len = data;
+        }else {
+            // å¯¹è±¡
+            let tmp = data;
+            if (utils.isFormData(data)) {
+                function formDataToObject(formData) {
+                    let object = {};
+                    formData.forEach(function (value, key) {
+                        object[key] = value;
+                    });
+                    return object;
+                }
+                tmp = formDataToObject(data);
+            }
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯å¯¹è±¡ï¼Œå°†å…¶è½¬æ¢ä¸ºå­—ç¬¦ä¸²åè®¡ç®—é•¿åº¦
+            len = buffer.byteLength(JSON.stringify(tmp), 'utf8');
+        }
+    }
+    return len;
+}
+/**
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ */
+const judgeMaxBodyLength = (config, reject) => {
+    // è®¡ç®—è¯·æ±‚ä½“å¤§å°
+    let requestBodyLength = calculateLength(config.data);
+    if (config.maxBodyLength > -1 && requestBodyLength > config.maxBodyLength) {
+        return reject(new AxiosError('Request body larger than maxBodyLength limit', AxiosError.ERR_BAD_REQUEST, config));
+    }
+}
+/**
+ * @param data å“åº”æ•°æ®
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ * @param lastRequest è¯·æ±‚å®ä¾‹
+ * @param handle æ ¡éªŒåå›è°ƒ
+ */
+const judgeMaxContentLength = (data, config, reject, lastRequest, handle) => {
+    // è®¡ç®—å“åº”å¤§å°
+    let maxContentLength = calculateLength(data);
+    let valid = true;
+    if (config.maxContentLength > -1 && maxContentLength > config.maxContentLength) {
+        valid = false;
+    }
+    handle&&handle(valid);
+    // è¿”å›å†…å®¹å¤§äºconfig.maxContentLengthæŠ›å‡ºå¼‚å¸¸
+    if(!valid) {
+        return reject(new AxiosError(
+            'maxContentLength size of ' + config.maxContentLength + ' exceeded',
+            AxiosError.ERR_BAD_RESPONSE,
+            config,
+            lastRequest
+        ));
+    }
+}
+/**åˆ›å»ºè¯·æ±‚ä»»åŠ¡
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ */
+const setHttpConfig = (config, reject) => {
+    // æ¯ä¸€ä¸ªhttpRequestå¯¹åº”ä¸€ä¸ªhttpè¯·æ±‚ä»»åŠ¡ï¼Œä¸å¯å¤ç”¨
+    let httpRequest = _http.createHttp();
+    let fullPath = buildFullPath(config.baseURL, config.url, config.allowAbsoluteUrls);
+    // urlæ ¡éªŒ
+    if (!fullPath) {
+        return reject(new AxiosError("Cannot read properties of url!", AxiosError.ERR_BAD_OPTION, config, null, null));
+    } else if (typeof (fullPath) !== 'string') {
+        return reject(new AxiosError("Url type should be character typeï¼", AxiosError.ERR_BAD_OPTION_VALUE, config, null, null));
+    }
+    // åˆ¤æ–­è®¾ç½®çš„è¯·æ±‚ä½“çš„å¤§å°
+    judgeMaxBodyLength(config, reject);
+    return {
+        httpRequest,
+        fullPath,
+        config
+    }
+}
+/**è®¾ç½®è¯·æ±‚è‡ªå®šä¹‰é…ç½®é¡¹
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param handle å¤„ç†optionsçš„å‡½æ•°
+ */
+const setOptions = (config, handle) => {
+    let options = { method: config.method.toUpperCase(), header: config.headers, readTimeout: 0, maxLimit: -1 };
+    handle && handle(options);
+    // è®¾ç½®è¯·æ±‚ä½“
+    if (!utils.isUndefined(config.data)) { // å½“ä½¿ç”¨POSTè¯·æ±‚æ—¶æ­¤å­—æ®µç”¨äºä¼ é€’å†…å®¹
+        options.extraData = config.data;
+    }
+    // è®¾ç½®è¿æ¥è¶…æ—¶
+    if (utils.isNumber(config.connectTimeout)) {
+        options.connectTimeout = config.connectTimeout;
+    }
+    // è®¾ç½®è¯»å–è¶…æ—¶
+    if (utils.isNumber(config.timeout)) {
+        options.readTimeout = config.timeout;
+    }
+    // è®¾ç½®è¯»å–è¶…æ—¶
+    if (utils.isNumber(config.readTimeout)) {
+        options.readTimeout = config.readTimeout;
+    }
+    // è®¾ç½®å“åº”æ¶ˆæ¯çš„æœ€å¤§å­—èŠ‚
+    if (utils.isNumber(config.maxContentLength)) {
+        options.maxLimit = config.maxContentLength;
+    }
+    // è®¾ç½®responseType
+    if (!utils.isUndefined(config.responseType)) {
+        options.expectDataType = _getResponseType(config.responseType);
+    }
+    // è®¾ç½®ä¼˜å…ˆçº§
+    if (utils.isNumber(config.priority)) {
+        options.priority = config.priority;
+    }
+    // è®¾ç½®è¯ä¹¦
+    setCertificate(config, options);
+    // è®¾ç½®æœ€å¤§é‡å®šå‘æ¬¡æ•°
+    setMaxRedirects(config, options);
+    // è®¾ç½®ä»£ç†
+    if (!utils.isUndefined(config.proxy)) {
+        options.usingProxy = config.proxy;
+    }
+    // è®¾ç½®ç³»ç»Ÿæ‹¦æˆªå™¨
+    if (!utils.isUndefined(config.interceptorChain)) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (apiVersion < 22) {
+            throw new Error(`interceptorChain need Api >= 22,current api is ${apiVersion}`);
+        }
+        options.interceptorChain = config.interceptorChain;
+    }
+    setNewPropertiesOptions(config, options);
+    return options;
+};
+
+/**
+ * è®¾ç½®æœ€å¤§é‡å®šå‘æ¬¡æ•°
+ */
+const setMaxRedirects = (config, options) => {
+    if (utils.isNumber(config.maxRedirects)) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (apiVersion < 23) {
+            throw new Error(`maxRedirects need Api >= 23,current api is ${apiVersion}`);
+        }
+        options.maxRedirects = config.maxRedirects;
+    }
+};
+
+/**
+ * è®¾ç½®è¯ä¹¦
+ */
+const setCertificate = (config, options) => {
+    // è®¾ç½®caPath
+    if (config.caPath) {
+        options.caPath = config.caPath;
+    }
+
+    // è®¾ç½®sslType
+    if (config.sslType) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (config.sslType === 'TLCP' && apiVersion < 20) {
+            throw new Error(`TLCP need Api >= 20,current api is ${apiVersion}`);
+        }
+        options.sslType = config.sslType;
+    }
+
+    // è®¾ç½®å®¢æˆ·ç«¯è¯ä¹¦
+    if (config.clientEncCert) {
+        options.clientEncCert = config.clientEncCert;
+        let { keyPasswd: keyPassword, ...rest } = options.clientEncCert;
+        let clientEncCert = { ...rest, keyPassword };
+        // certTypeè½¬æ¢ä¸ºå¤§å°å­—ç¬¦
+        let certType = clientEncCert.certType;
+        clientEncCert.certType = certType ? certType.toUpperCase() : certType;
+        options.clientEncCert = clientEncCert;
+    }
+
+    // è®¾ç½®å®¢æˆ·ç«¯è¯ä¹¦
+    if (!utils.isUndefined(config.clientCert)) {
+        options.clientCert = config.clientCert;
+        // keyPasswdè½¬æ¢ä¸ºkeyPassword
+        let { keyPasswd: keyPassword, ...rest } = options.clientCert;
+        let clientCert = { ...rest, keyPassword };
+        // certTypeè½¬æ¢ä¸ºå¤§å°å­—ç¬¦
+        let certType = clientCert.certType;
+        clientCert.certType = certType ? certType.toUpperCase() : certType;
+        options.clientCert = clientCert;
+    }
+};
+
+
+
+/**è®¾ç½®æ–°çš„è¯·æ±‚è‡ªå®šä¹‰é…ç½®é¡¹
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param handle å¤„ç†optionsçš„å‡½æ•°
+ */
+const setNewPropertiesOptions = (config, options) => {
+    // è®¾ç½®éªŒè¯è¿œç¨‹æœåŠ¡å™¨CA
+    if (!utils.isUndefined(config.remoteValidation)) {
+        options.remoteValidation = config.remoteValidation;
+    }
+    // è®¾ç½®ä½¿ç”¨åè®®
+    if (!utils.isUndefined(config.usingProtocol)) {
+        options.usingProtocol = config.usingProtocol;
+    }
+    // è®¾ç½®resumeFrom
+    if (!utils.isUndefined(config.resumeFrom)) {
+        options.resumeFrom = config.resumeFrom;
+    }
+    // è®¾ç½®resumeTo
+    if (!utils.isUndefined(config.resumeTo)) {
+        options.resumeTo = config.resumeTo;
+    }
+    // è®¾ç½®dnsOverHttps
+    if (!utils.isUndefined(config.dnsOverHttps)) {
+        options.dnsOverHttps = config.dnsOverHttps;
+    }
+    // è®¾ç½®dnsServers
+    if (!utils.isUndefined(config.dnsServers)) {
+        options.dnsServers = config.dnsServers;
+    }
+    // è®¾ç½®certificatePinning
+    if (!utils.isUndefined(config.certificatePinning)) {
+        options.certificatePinning = config.certificatePinning;
+    }
+    // è®¾ç½®addressFamily
+    if (!utils.isUndefined(config.addressFamily)) {
+        options.addressFamily = config.addressFamily;
+    }
+    // è®¾ç½®tlsOptions
+    if (!utils.isUndefined(config.tlsOptions)) {
+        options.tlsOptions = config.tlsOptions;
+    }
+    // è®¾ç½®serverAuthentication
+    if (!utils.isUndefined(config.serverAuthentication)) {
+        options.serverAuthentication = config.serverAuthentication;
+    }
+};
+
+const _getResponseType = (responseType) => {
+    switch (responseType.toUpperCase()) {
+        case 'STRING':
+            return 0;
+        case 'OBJECT':
+            return 1;
+        case 'ARRAY_BUFFER':
+            return 2;
+        default :
+            return 1;
+    }
+};
+
+export { setHttpConfig, setOptions, judgeMaxContentLength }ÂœÙšD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\http.jsÙD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\download.jsÙœD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\upload.jsÙ[ hvigor_ignore_D:_ruanjian_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.file.fs.d.tsÙD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\utils.jsÙZ hvigor_ignore_D:_ruanjian_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.buffer.d.tsÙ\ hvigor_ignore_D:_ruanjian_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.net.http.d.tsÙœD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\env\classes\FormData.jsÙ—D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\core\AxiosError.jsÙšD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\core\buildFullPath.jsÙD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\LogUtil.jsÙ^ hvigor_ignore_D:_ruanjian_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.deviceInfo.d.tsÙ›D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\index.jsÔrB˜±isLocalDependency¯isNodeEntryFile§pkgPath§pkgNameªpkgVersion±belongProjectPath±dependencyPkgInfo¨commonjsÂÂÙhD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios«@ohos/axios¦2.2.10Ù-D:\GongZuo\ComicReader\clients\harmony-nativeÔrC’§pkgNameªpkgVersion«@ohos/axios¦2.2.10ÔrD“°hasDefaultExport¯hasNamedExportsªisCommonJSÃÃÂÃÚ0í/*
+ * The MIT License (MIT)
+ * Copyright (C) 2023 Huawei Device Co., Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ */
+
+import http from './http.js'
+import download from './download.js'
+import upload from './upload.js'
+import fs from '@ohos.file.fs';
+import utils from '../../utils';
+import buffer from '@ohos.buffer';
+import _http from '@ohos.net.http';
+import FormData from '../../env/classes/FormData.js'
+import AxiosError from '../../../lib/core/AxiosError'
+import buildFullPath from '../../../lib/core/buildFullPath';
+import { LogUtil } from '../../LogUtil'
+import deviceInfo from '@ohos.deviceInfo';
+
+const isXHRAdapterSupported = true
+const part = '/data/storage/';
+
+export default isXHRAdapterSupported && function (config) {
+    return new Promise(function (resolve, reject) {
+        const httpConfig = setHttpConfig(config, reject);
+        if (config.data && config.data instanceof FormData && (config.method.toUpperCase() === 'POST' || config.method.toUpperCase() === 'PUT')) {
+            // ä¸Šä¼ 
+            LogUtil.info('upload in: %s', config.method.toUpperCase());
+            upload(httpConfig, resolve, reject);
+        } else if (config.filePath) {
+            // ä¸‹è½½ã€‚å¦‚æœæ–‡ä»¶å·²å­˜åœ¨ï¼Œåˆ™ç›´æ¥è¿”å›é”™è¯¯ã€‚
+            LogUtil.info('download file : %s', config.filePath);
+            try {
+                let path = '';
+                let cacheDir = '';
+                let filePath = config.filePath;
+                if(config.context) {
+                    cacheDir = config.context.cacheDir;
+                    path = config.filePath.indexOf(cacheDir) > -1 ?  filePath : `${cacheDir}/${filePath}`;
+                } else {
+                    if(filePath.indexOf(part)===-1) {
+                        return reject(new AxiosError('If there is no context, the filePath must be a complete fd path!', AxiosError.ERR_BAD_OPTION, null, null, null));
+                    }
+                }
+                let res = fs.accessSync(path);
+                if(!res){
+                    download(httpConfig, resolve, reject);
+                }else {
+                    reject(new AxiosError('The file already exist, please delete the file first!', AxiosError.ERR_BAD_OPTION, null, null, null));
+                }
+            } catch (err) {
+                LogUtil.error('isXHRAdapterSupported error: %s', err.message);
+                reject(new AxiosError(err, AxiosError.ERR_BAD_OPTION, null, null, null));
+            }
+        } else {
+            // å‘é€è¯·æ±‚
+            LogUtil.info('http request : %s', config.method.toUpperCase());
+            http(httpConfig, resolve, reject);
+        }
+    })
+}
+/**
+ * @param data éœ€è¦è®¡ç®—å­—èŠ‚çš„æ•°æ®
+ */
+const calculateLength = (data) => {
+    let len = 0;
+    if (data) {
+        if (typeof data === 'string') {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯å­—ç¬¦ä¸²ï¼Œç›´æ¥è®¡ç®—é•¿åº¦
+            len = buffer.byteLength(data, 'utf8');
+        } else if (buffer.isBuffer(data)) {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯Bufferå¯¹è±¡ï¼Œç›´æ¥è·å–é•¿åº¦
+            len = data.length;
+        } else if (data instanceof ArrayBuffer) {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯ArrayBufferå¯¹è±¡ï¼Œç›´æ¥è·å–é•¿åº¦
+            len = data.byteLength;
+        } else if (typeof data === 'number') {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯numberï¼Œç›´æ¥èµ‹å€¼
+            len = data;
+        }else {
+            // å¯¹è±¡
+            let tmp = data;
+            if (utils.isFormData(data)) {
+                function formDataToObject(formData) {
+                    let object = {};
+                    formData.forEach(function (value, key) {
+                        object[key] = value;
+                    });
+                    return object;
+                }
+                tmp = formDataToObject(data);
+            }
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯å¯¹è±¡ï¼Œå°†å…¶è½¬æ¢ä¸ºå­—ç¬¦ä¸²åè®¡ç®—é•¿åº¦
+            len = buffer.byteLength(JSON.stringify(tmp), 'utf8');
+        }
+    }
+    return len;
+}
+/**
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ */
+const judgeMaxBodyLength = (config, reject) => {
+    // è®¡ç®—è¯·æ±‚ä½“å¤§å°
+    let requestBodyLength = calculateLength(config.data);
+    if (config.maxBodyLength > -1 && requestBodyLength > config.maxBodyLength) {
+        return reject(new AxiosError('Request body larger than maxBodyLength limit', AxiosError.ERR_BAD_REQUEST, config));
+    }
+}
+/**
+ * @param data å“åº”æ•°æ®
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ * @param lastRequest è¯·æ±‚å®ä¾‹
+ * @param handle æ ¡éªŒåå›è°ƒ
+ */
+const judgeMaxContentLength = (data, config, reject, lastRequest, handle) => {
+    // è®¡ç®—å“åº”å¤§å°
+    let maxContentLength = calculateLength(data);
+    let valid = true;
+    if (config.maxContentLength > -1 && maxContentLength > config.maxContentLength) {
+        valid = false;
+    }
+    handle&&handle(valid);
+    // è¿”å›å†…å®¹å¤§äºconfig.maxContentLengthæŠ›å‡ºå¼‚å¸¸
+    if(!valid) {
+        return reject(new AxiosError(
+            'maxContentLength size of ' + config.maxContentLength + ' exceeded',
+            AxiosError.ERR_BAD_RESPONSE,
+            config,
+            lastRequest
+        ));
+    }
+}
+/**åˆ›å»ºè¯·æ±‚ä»»åŠ¡
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ */
+const setHttpConfig = (config, reject) => {
+    // æ¯ä¸€ä¸ªhttpRequestå¯¹åº”ä¸€ä¸ªhttpè¯·æ±‚ä»»åŠ¡ï¼Œä¸å¯å¤ç”¨
+    let httpRequest = _http.createHttp();
+    let fullPath = buildFullPath(config.baseURL, config.url, config.allowAbsoluteUrls);
+    // urlæ ¡éªŒ
+    if (!fullPath) {
+        return reject(new AxiosError("Cannot read properties of url!", AxiosError.ERR_BAD_OPTION, config, null, null));
+    } else if (typeof (fullPath) !== 'string') {
+        return reject(new AxiosError("Url type should be character typeï¼", AxiosError.ERR_BAD_OPTION_VALUE, config, null, null));
+    }
+    // åˆ¤æ–­è®¾ç½®çš„è¯·æ±‚ä½“çš„å¤§å°
+    judgeMaxBodyLength(config, reject);
+    return {
+        httpRequest,
+        fullPath,
+        config
+    }
+}
+/**è®¾ç½®è¯·æ±‚è‡ªå®šä¹‰é…ç½®é¡¹
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param handle å¤„ç†optionsçš„å‡½æ•°
+ */
+const setOptions = (config, handle) => {
+    let options = { method: config.method.toUpperCase(), header: config.headers, readTimeout: 0, maxLimit: -1 };
+    handle && handle(options);
+    // è®¾ç½®è¯·æ±‚ä½“
+    if (!utils.isUndefined(config.data)) { // å½“ä½¿ç”¨POSTè¯·æ±‚æ—¶æ­¤å­—æ®µç”¨äºä¼ é€’å†…å®¹
+        options.extraData = config.data;
+    }
+    // è®¾ç½®è¿æ¥è¶…æ—¶
+    if (utils.isNumber(config.connectTimeout)) {
+        options.connectTimeout = config.connectTimeout;
+    }
+    // è®¾ç½®è¯»å–è¶…æ—¶
+    if (utils.isNumber(config.timeout)) {
+        options.readTimeout = config.timeout;
+    }
+    // è®¾ç½®è¯»å–è¶…æ—¶
+    if (utils.isNumber(config.readTimeout)) {
+        options.readTimeout = config.readTimeout;
+    }
+    // è®¾ç½®å“åº”æ¶ˆæ¯çš„æœ€å¤§å­—èŠ‚
+    if (utils.isNumber(config.maxContentLength)) {
+        options.maxLimit = config.maxContentLength;
+    }
+    // è®¾ç½®responseType
+    if (!utils.isUndefined(config.responseType)) {
+        options.expectDataType = _getResponseType(config.responseType);
+    }
+    // è®¾ç½®ä¼˜å…ˆçº§
+    if (utils.isNumber(config.priority)) {
+        options.priority = config.priority;
+    }
+    // è®¾ç½®è¯ä¹¦
+    setCertificate(config, options);
+    // è®¾ç½®æœ€å¤§é‡å®šå‘æ¬¡æ•°
+    setMaxRedirects(config, options);
+    // è®¾ç½®ä»£ç†
+    if (!utils.isUndefined(config.proxy)) {
+        options.usingProxy = config.proxy;
+    }
+    // è®¾ç½®ç³»ç»Ÿæ‹¦æˆªå™¨
+    if (!utils.isUndefined(config.interceptorChain)) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (apiVersion < 22) {
+            throw new Error(`interceptorChain need Api >= 22,current api is ${apiVersion}`);
+        }
+        options.interceptorChain = config.interceptorChain;
+    }
+    setNewPropertiesOptions(config, options);
+    return options;
+};
+
+/**
+ * è®¾ç½®æœ€å¤§é‡å®šå‘æ¬¡æ•°
+ */
+const setMaxRedirects = (config, options) => {
+    if (utils.isNumber(config.maxRedirects)) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (apiVersion < 23) {
+            throw new Error(`maxRedirects need Api >= 23,current api is ${apiVersion}`);
+        }
+        options.maxRedirects = config.maxRedirects;
+    }
+};
+
+/**
+ * è®¾ç½®è¯ä¹¦
+ */
+const setCertificate = (config, options) => {
+    // è®¾ç½®caPath
+    if (config.caPath) {
+        options.caPath = config.caPath;
+    }
+
+    // è®¾ç½®sslType
+    if (config.sslType) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (config.sslType === 'TLCP' && apiVersion < 20) {
+            throw new Error(`TLCP need Api >= 20,current api is ${apiVersion}`);
+        }
+        options.sslType = config.sslType;
+    }
+
+    // è®¾ç½®å®¢æˆ·ç«¯è¯ä¹¦
+    if (config.clientEncCert) {
+        options.clientEncCert = config.clientEncCert;
+        let { keyPasswd: keyPassword, ...rest } = options.clientEncCert;
+        let clientEncCert = { ...rest, keyPassword };
+        // certTypeè½¬æ¢ä¸ºå¤§å°å­—ç¬¦
+        let certType = clientEncCert.certType;
+        clientEncCert.certType = certType ? certType.toUpperCase() : certType;
+        options.clientEncCert = clientEncCert;
+    }
+
+    // è®¾ç½®å®¢æˆ·ç«¯è¯ä¹¦
+    if (!utils.isUndefined(config.clientCert)) {
+        options.clientCert = config.clientCert;
+        // keyPasswdè½¬æ¢ä¸ºkeyPassword
+        let { keyPasswd: keyPassword, ...rest } = options.clientCert;
+        let clientCert = { ...rest, keyPassword };
+        // certTypeè½¬æ¢ä¸ºå¤§å°å­—ç¬¦
+        let certType = clientCert.certType;
+        clientCert.certType = certType ? certType.toUpperCase() : certType;
+        options.clientCert = clientCert;
+    }
+};
+
+
+
+/**è®¾ç½®æ–°çš„è¯·æ±‚è‡ªå®šä¹‰é…ç½®é¡¹
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param handle å¤„ç†optionsçš„å‡½æ•°
+ */
+const setNewPropertiesOptions = (config, options) => {
+    // è®¾ç½®éªŒè¯è¿œç¨‹æœåŠ¡å™¨CA
+    if (!utils.isUndefined(config.remoteValidation)) {
+        options.remoteValidation = config.remoteValidation;
+    }
+    // è®¾ç½®ä½¿ç”¨åè®®
+    if (!utils.isUndefined(config.usingProtocol)) {
+        options.usingProtocol = config.usingProtocol;
+    }
+    // è®¾ç½®resumeFrom
+    if (!utils.isUndefined(config.resumeFrom)) {
+        options.resumeFrom = config.resumeFrom;
+    }
+    // è®¾ç½®resumeTo
+    if (!utils.isUndefined(config.resumeTo)) {
+        options.resumeTo = config.resumeTo;
+    }
+    // è®¾ç½®dnsOverHttps
+    if (!utils.isUndefined(config.dnsOverHttps)) {
+        options.dnsOverHttps = config.dnsOverHttps;
+    }
+    // è®¾ç½®dnsServers
+    if (!utils.isUndefined(config.dnsServers)) {
+        options.dnsServers = config.dnsServers;
+    }
+    // è®¾ç½®certificatePinning
+    if (!utils.isUndefined(config.certificatePinning)) {
+        options.certificatePinning = config.certificatePinning;
+    }
+    // è®¾ç½®addressFamily
+    if (!utils.isUndefined(config.addressFamily)) {
+        options.addressFamily = config.addressFamily;
+    }
+    // è®¾ç½®tlsOptions
+    if (!utils.isUndefined(config.tlsOptions)) {
+        options.tlsOptions = config.tlsOptions;
+    }
+    // è®¾ç½®serverAuthentication
+    if (!utils.isUndefined(config.serverAuthentication)) {
+        options.serverAuthentication = config.serverAuthentication;
+    }
+};
+
+const _getResponseType = (responseType) => {
+    switch (responseType.toUpperCase()) {
+        case 'STRING':
+            return 0;
+        case 'OBJECT':
+            return 1;
+        case 'ARRAY_BUFFER':
+            return 2;
+        default :
+            return 1;
+    }
+};
+
+export { setHttpConfig, setOptions, judgeMaxContentLength }ÔrE•§version¨mappings¥names§sources®sourcesContentÜR‘”    ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”  	 ‘”  
+ ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”    ‘”  ! ‘”  " ‘”  # ‘”  $ ‘”  % ‘”  & ‘”  ' ‘”  ( ‘”  ) ‘”  * ‘”  + ‘”  , ‘”  - ‘”  . ‘”  / ‘”  0 ‘”  1 ‘”  2 ‘”  3 ‘”  4 ‘”  5 ‘”  6 ‘”  7 ‘”  8 ‘”  9 ‘”  : ‘”  ; ‘”  < ‘”  = ‘”  > ‘”  ? ‘”  Ì@ ‘”  ÌA ‘”  ÌB ‘”  ÌC ‘”  ÌD ‘”  ÌE ‘”  ÌF ‘”  ÌG ‘”  ÌH ‘”  ÌI ‘”  ÌJ ‘”  ÌK ‘”  ÌL ‘”  ÌM ‘”  ÌN ‘”  ÌO ‘”  ÌP ‘”  ÌQ ‘”  ÌR ‘”  ÌS ‘”  ÌT ‘”  ÌU ‘”  ÌV ‘”  ÌW ‘”  ÌX ‘”  ÌY ‘”  ÌZ ‘”  Ì[ ‘”  Ì\ ‘”  Ì] ‘”  Ì^ ‘”  Ì_ ‘”  Ì` ‘”  Ìa ‘”  Ìb ‘”  Ìc ‘”  Ìd ‘”  Ìe ‘”  Ìf ‘”  Ìg ‘”  Ìh ‘”  Ìi ‘”  Ìj ‘”  Ìk ‘”  Ìl ‘”  Ìm ‘”  Ìn ‘”  Ìo ‘”  Ìp ‘”  Ìq ‘”  Ìr ‘”  Ìs ‘”  Ìt ‘”  Ìu ‘”  Ìv ‘”  Ìw ‘”  Ìx ‘”  Ìy ‘”  Ìz ‘”  Ì{ ‘”  Ì| ‘”  Ì} ‘”  Ì~ ‘”  Ì ‘”  Ì€ ‘”  Ì ‘”  Ì‚ ‘”  Ìƒ ‘”  Ì„ ‘”  Ì… ‘”  Ì† ‘”  Ì‡ ‘”  Ìˆ ‘”  Ì‰ ‘”  ÌŠ ‘”  Ì‹ ‘”  ÌŒ ‘”  Ì ‘”  Ì ‘”  Ì ‘”  Ì ‘”  Ì‘ ‘”  Ì’ ‘”  Ì“ ‘”  Ì” ‘”  Ì• ‘”  Ì– ‘”  Ì— ‘”  Ì˜ ‘”  Ì™ ‘”  Ìš ‘”  Ì› ‘”  Ìœ ‘”  Ì ‘”  Ì ‘”  ÌŸ ‘”  Ì  ‘”  Ì¡ ‘”  Ì¢ ‘”  Ì£ ‘”  Ì¤ ‘”  Ì¥ ‘”  Ì¦ ‘”  Ì§ ‘”  Ì¨ ‘”  Ì© ‘”  Ìª ‘”  Ì« ‘”  Ì¬ ‘”  Ì­ ‘”  Ì® ‘”  Ì¯ ‘”  Ì° ‘”  Ì± ‘”  Ì² ‘”  Ì³ ‘”  Ì´ ‘”  Ìµ ‘”  Ì¶ ‘”  Ì· ‘”  Ì¸ ‘”  Ì¹ ‘”  Ìº ‘”  Ì» ‘”  Ì¼ ‘”  Ì½ ‘”  Ì¾ ‘”  Ì¿ ‘”  ÌÀ ‘”  ÌÁ ‘”  ÌÂ ‘”  ÌÃ ‘”  ÌÄ ‘”  ÌÅ ‘”  ÌÆ ‘”  ÌÇ ‘”  ÌÈ ‘”  ÌÉ ‘”  ÌÊ ‘”  ÌË ‘”  ÌÌ ‘”  ÌÍ ‘”  ÌÎ ‘”  ÌÏ ‘”  ÌĞ ‘”  ÌÑ ‘”  ÌÒ ‘”  ÌÓ ‘”  ÌÔ ‘”  ÌÕ ‘”  ÌÖ ‘”  Ì× ‘”  ÌØ ‘”  ÌÙ ‘”  ÌÚ ‘”  ÌÛ ‘”  ÌÜ ‘”  Ìİ ‘”  ÌŞ ‘”  Ìß ‘”  Ìà ‘”  Ìá ‘”  Ìâ ‘”  Ìã ‘”  Ìä ‘”  Ìå ‘”  Ìæ ‘”  Ìç ‘”  Ìè ‘”  Ìé ‘”  Ìê ‘”  Ìë ‘”  Ìì ‘”  Ìí ‘”  Ìî ‘”  Ìï ‘”  Ìğ ‘”  Ìñ ‘”  Ìò ‘”  Ìó ‘”  Ìô ‘”  Ìõ ‘”  Ìö ‘”  Ì÷ ‘”  Ìø ‘”  Ìù ‘”  Ìú ‘”  Ìû ‘”  Ìü ‘”  Ìı ‘”  Ìş ‘”  Ìÿ ‘”  Í  ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í	 ‘”  Í
+ ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í ‘”  Í  ‘”  Í! ‘”  Í" ‘”  Í# ‘”  Í$ ‘”  Í% ‘”  Í& ‘”  Í' ‘”  Í( ‘”  Í) ‘”  Í* ‘”  Í+ ‘”  Í, ‘”  Í- ‘”  Í. ‘”  Í/ ‘”  Í0 ‘”  Í1 ‘”  Í2 ‘”  Í3 ‘”  Í4 ‘”  Í5 ‘”  Í6 ‘”  Í7 ‘”  Í8 ‘”  Í9 ‘”  Í: ‘”  Í; ‘”  Í< ‘”  Í= ‘”  Í> ‘”  Í? ‘”  Í@ ‘”  ÍA ‘”  ÍB ‘”  ÍC ‘”  ÍD ‘”  ÍE ‘”  ÍF ‘”  ÍG ‘”  ÍH ‘”  ÍI ‘”  ÍJ ‘”  ÍK ‘”  ÍL ‘”  ÍM ‘”  ÍN ‘”  ÍO ‘”  ÍP ‘”  ÍQ ‘Ù›D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\index.js‘Ú0í/*
+ * The MIT License (MIT)
+ * Copyright (C) 2023 Huawei Device Co., Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ */
+
+import http from './http.js'
+import download from './download.js'
+import upload from './upload.js'
+import fs from '@ohos.file.fs';
+import utils from '../../utils';
+import buffer from '@ohos.buffer';
+import _http from '@ohos.net.http';
+import FormData from '../../env/classes/FormData.js'
+import AxiosError from '../../../lib/core/AxiosError'
+import buildFullPath from '../../../lib/core/buildFullPath';
+import { LogUtil } from '../../LogUtil'
+import deviceInfo from '@ohos.deviceInfo';
+
+const isXHRAdapterSupported = true
+const part = '/data/storage/';
+
+export default isXHRAdapterSupported && function (config) {
+    return new Promise(function (resolve, reject) {
+        const httpConfig = setHttpConfig(config, reject);
+        if (config.data && config.data instanceof FormData && (config.method.toUpperCase() === 'POST' || config.method.toUpperCase() === 'PUT')) {
+            // ä¸Šä¼ 
+            LogUtil.info('upload in: %s', config.method.toUpperCase());
+            upload(httpConfig, resolve, reject);
+        } else if (config.filePath) {
+            // ä¸‹è½½ã€‚å¦‚æœæ–‡ä»¶å·²å­˜åœ¨ï¼Œåˆ™ç›´æ¥è¿”å›é”™è¯¯ã€‚
+            LogUtil.info('download file : %s', config.filePath);
+            try {
+                let path = '';
+                let cacheDir = '';
+                let filePath = config.filePath;
+                if(config.context) {
+                    cacheDir = config.context.cacheDir;
+                    path = config.filePath.indexOf(cacheDir) > -1 ?  filePath : `${cacheDir}/${filePath}`;
+                } else {
+                    if(filePath.indexOf(part)===-1) {
+                        return reject(new AxiosError('If there is no context, the filePath must be a complete fd path!', AxiosError.ERR_BAD_OPTION, null, null, null));
+                    }
+                }
+                let res = fs.accessSync(path);
+                if(!res){
+                    download(httpConfig, resolve, reject);
+                }else {
+                    reject(new AxiosError('The file already exist, please delete the file first!', AxiosError.ERR_BAD_OPTION, null, null, null));
+                }
+            } catch (err) {
+                LogUtil.error('isXHRAdapterSupported error: %s', err.message);
+                reject(new AxiosError(err, AxiosError.ERR_BAD_OPTION, null, null, null));
+            }
+        } else {
+            // å‘é€è¯·æ±‚
+            LogUtil.info('http request : %s', config.method.toUpperCase());
+            http(httpConfig, resolve, reject);
+        }
+    })
+}
+/**
+ * @param data éœ€è¦è®¡ç®—å­—èŠ‚çš„æ•°æ®
+ */
+const calculateLength = (data) => {
+    let len = 0;
+    if (data) {
+        if (typeof data === 'string') {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯å­—ç¬¦ä¸²ï¼Œç›´æ¥è®¡ç®—é•¿åº¦
+            len = buffer.byteLength(data, 'utf8');
+        } else if (buffer.isBuffer(data)) {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯Bufferå¯¹è±¡ï¼Œç›´æ¥è·å–é•¿åº¦
+            len = data.length;
+        } else if (data instanceof ArrayBuffer) {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯ArrayBufferå¯¹è±¡ï¼Œç›´æ¥è·å–é•¿åº¦
+            len = data.byteLength;
+        } else if (typeof data === 'number') {
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯numberï¼Œç›´æ¥èµ‹å€¼
+            len = data;
+        }else {
+            // å¯¹è±¡
+            let tmp = data;
+            if (utils.isFormData(data)) {
+                function formDataToObject(formData) {
+                    let object = {};
+                    formData.forEach(function (value, key) {
+                        object[key] = value;
+                    });
+                    return object;
+                }
+                tmp = formDataToObject(data);
+            }
+            // å¦‚æœè¯·æ±‚ä½“æ˜¯å¯¹è±¡ï¼Œå°†å…¶è½¬æ¢ä¸ºå­—ç¬¦ä¸²åè®¡ç®—é•¿åº¦
+            len = buffer.byteLength(JSON.stringify(tmp), 'utf8');
+        }
+    }
+    return len;
+}
+/**
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ */
+const judgeMaxBodyLength = (config, reject) => {
+    // è®¡ç®—è¯·æ±‚ä½“å¤§å°
+    let requestBodyLength = calculateLength(config.data);
+    if (config.maxBodyLength > -1 && requestBodyLength > config.maxBodyLength) {
+        return reject(new AxiosError('Request body larger than maxBodyLength limit', AxiosError.ERR_BAD_REQUEST, config));
+    }
+}
+/**
+ * @param data å“åº”æ•°æ®
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ * @param lastRequest è¯·æ±‚å®ä¾‹
+ * @param handle æ ¡éªŒåå›è°ƒ
+ */
+const judgeMaxContentLength = (data, config, reject, lastRequest, handle) => {
+    // è®¡ç®—å“åº”å¤§å°
+    let maxContentLength = calculateLength(data);
+    let valid = true;
+    if (config.maxContentLength > -1 && maxContentLength > config.maxContentLength) {
+        valid = false;
+    }
+    handle&&handle(valid);
+    // è¿”å›å†…å®¹å¤§äºconfig.maxContentLengthæŠ›å‡ºå¼‚å¸¸
+    if(!valid) {
+        return reject(new AxiosError(
+            'maxContentLength size of ' + config.maxContentLength + ' exceeded',
+            AxiosError.ERR_BAD_RESPONSE,
+            config,
+            lastRequest
+        ));
+    }
+}
+/**åˆ›å»ºè¯·æ±‚ä»»åŠ¡
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param reject å¤±è´¥å›è°ƒ
+ */
+const setHttpConfig = (config, reject) => {
+    // æ¯ä¸€ä¸ªhttpRequestå¯¹åº”ä¸€ä¸ªhttpè¯·æ±‚ä»»åŠ¡ï¼Œä¸å¯å¤ç”¨
+    let httpRequest = _http.createHttp();
+    let fullPath = buildFullPath(config.baseURL, config.url, config.allowAbsoluteUrls);
+    // urlæ ¡éªŒ
+    if (!fullPath) {
+        return reject(new AxiosError("Cannot read properties of url!", AxiosError.ERR_BAD_OPTION, config, null, null));
+    } else if (typeof (fullPath) !== 'string') {
+        return reject(new AxiosError("Url type should be character typeï¼", AxiosError.ERR_BAD_OPTION_VALUE, config, null, null));
+    }
+    // åˆ¤æ–­è®¾ç½®çš„è¯·æ±‚ä½“çš„å¤§å°
+    judgeMaxBodyLength(config, reject);
+    return {
+        httpRequest,
+        fullPath,
+        config
+    }
+}
+/**è®¾ç½®è¯·æ±‚è‡ªå®šä¹‰é…ç½®é¡¹
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param handle å¤„ç†optionsçš„å‡½æ•°
+ */
+const setOptions = (config, handle) => {
+    let options = { method: config.method.toUpperCase(), header: config.headers, readTimeout: 0, maxLimit: -1 };
+    handle && handle(options);
+    // è®¾ç½®è¯·æ±‚ä½“
+    if (!utils.isUndefined(config.data)) { // å½“ä½¿ç”¨POSTè¯·æ±‚æ—¶æ­¤å­—æ®µç”¨äºä¼ é€’å†…å®¹
+        options.extraData = config.data;
+    }
+    // è®¾ç½®è¿æ¥è¶…æ—¶
+    if (utils.isNumber(config.connectTimeout)) {
+        options.connectTimeout = config.connectTimeout;
+    }
+    // è®¾ç½®è¯»å–è¶…æ—¶
+    if (utils.isNumber(config.timeout)) {
+        options.readTimeout = config.timeout;
+    }
+    // è®¾ç½®è¯»å–è¶…æ—¶
+    if (utils.isNumber(config.readTimeout)) {
+        options.readTimeout = config.readTimeout;
+    }
+    // è®¾ç½®å“åº”æ¶ˆæ¯çš„æœ€å¤§å­—èŠ‚
+    if (utils.isNumber(config.maxContentLength)) {
+        options.maxLimit = config.maxContentLength;
+    }
+    // è®¾ç½®responseType
+    if (!utils.isUndefined(config.responseType)) {
+        options.expectDataType = _getResponseType(config.responseType);
+    }
+    // è®¾ç½®ä¼˜å…ˆçº§
+    if (utils.isNumber(config.priority)) {
+        options.priority = config.priority;
+    }
+    // è®¾ç½®è¯ä¹¦
+    setCertificate(config, options);
+    // è®¾ç½®æœ€å¤§é‡å®šå‘æ¬¡æ•°
+    setMaxRedirects(config, options);
+    // è®¾ç½®ä»£ç†
+    if (!utils.isUndefined(config.proxy)) {
+        options.usingProxy = config.proxy;
+    }
+    // è®¾ç½®ç³»ç»Ÿæ‹¦æˆªå™¨
+    if (!utils.isUndefined(config.interceptorChain)) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (apiVersion < 22) {
+            throw new Error(`interceptorChain need Api >= 22,current api is ${apiVersion}`);
+        }
+        options.interceptorChain = config.interceptorChain;
+    }
+    setNewPropertiesOptions(config, options);
+    return options;
+};
+
+/**
+ * è®¾ç½®æœ€å¤§é‡å®šå‘æ¬¡æ•°
+ */
+const setMaxRedirects = (config, options) => {
+    if (utils.isNumber(config.maxRedirects)) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (apiVersion < 23) {
+            throw new Error(`maxRedirects need Api >= 23,current api is ${apiVersion}`);
+        }
+        options.maxRedirects = config.maxRedirects;
+    }
+};
+
+/**
+ * è®¾ç½®è¯ä¹¦
+ */
+const setCertificate = (config, options) => {
+    // è®¾ç½®caPath
+    if (config.caPath) {
+        options.caPath = config.caPath;
+    }
+
+    // è®¾ç½®sslType
+    if (config.sslType) {
+        let apiVersion = deviceInfo.sdkApiVersion;
+        if (config.sslType === 'TLCP' && apiVersion < 20) {
+            throw new Error(`TLCP need Api >= 20,current api is ${apiVersion}`);
+        }
+        options.sslType = config.sslType;
+    }
+
+    // è®¾ç½®å®¢æˆ·ç«¯è¯ä¹¦
+    if (config.clientEncCert) {
+        options.clientEncCert = config.clientEncCert;
+        let { keyPasswd: keyPassword, ...rest } = options.clientEncCert;
+        let clientEncCert = { ...rest, keyPassword };
+        // certTypeè½¬æ¢ä¸ºå¤§å°å­—ç¬¦
+        let certType = clientEncCert.certType;
+        clientEncCert.certType = certType ? certType.toUpperCase() : certType;
+        options.clientEncCert = clientEncCert;
+    }
+
+    // è®¾ç½®å®¢æˆ·ç«¯è¯ä¹¦
+    if (!utils.isUndefined(config.clientCert)) {
+        options.clientCert = config.clientCert;
+        // keyPasswdè½¬æ¢ä¸ºkeyPassword
+        let { keyPasswd: keyPassword, ...rest } = options.clientCert;
+        let clientCert = { ...rest, keyPassword };
+        // certTypeè½¬æ¢ä¸ºå¤§å°å­—ç¬¦
+        let certType = clientCert.certType;
+        clientCert.certType = certType ? certType.toUpperCase() : certType;
+        options.clientCert = clientCert;
+    }
+};
+
+
+
+/**è®¾ç½®æ–°çš„è¯·æ±‚è‡ªå®šä¹‰é…ç½®é¡¹
+ * @param config è¯·æ±‚é…ç½®é¡¹
+ * @param handle å¤„ç†optionsçš„å‡½æ•°
+ */
+const setNewPropertiesOptions = (config, options) => {
+    // è®¾ç½®éªŒè¯è¿œç¨‹æœåŠ¡å™¨CA
+    if (!utils.isUndefined(config.remoteValidation)) {
+        options.remoteValidation = config.remoteValidation;
+    }
+    // è®¾ç½®ä½¿ç”¨åè®®
+    if (!utils.isUndefined(config.usingProtocol)) {
+        options.usingProtocol = config.usingProtocol;
+    }
+    // è®¾ç½®resumeFrom
+    if (!utils.isUndefined(config.resumeFrom)) {
+        options.resumeFrom = config.resumeFrom;
+    }
+    // è®¾ç½®resumeTo
+    if (!utils.isUndefined(config.resumeTo)) {
+        options.resumeTo = config.resumeTo;
+    }
+    // è®¾ç½®dnsOverHttps
+    if (!utils.isUndefined(config.dnsOverHttps)) {
+        options.dnsOverHttps = config.dnsOverHttps;
+    }
+    // è®¾ç½®dnsServers
+    if (!utils.isUndefined(config.dnsServers)) {
+        options.dnsServers = config.dnsServers;
+    }
+    // è®¾ç½®certificatePinning
+    if (!utils.isUndefined(config.certificatePinning)) {
+        options.certificatePinning = config.certificatePinning;
+    }
+    // è®¾ç½®addressFamily
+    if (!utils.isUndefined(config.addressFamily)) {
+        options.addressFamily = config.addressFamily;
+    }
+    // è®¾ç½®tlsOptions
+    if (!utils.isUndefined(config.tlsOptions)) {
+        options.tlsOptions = config.tlsOptions;
+    }
+    // è®¾ç½®serverAuthentication
+    if (!utils.isUndefined(config.serverAuthentication)) {
+        options.serverAuthentication = config.serverAuthentication;
+    }
+};
+
+const _getResponseType = (responseType) => {
+    switch (responseType.toUpperCase()) {
+        case 'STRING':
+            return 0;
+        case 'OBJECT':
+            return 1;
+        case 'ARRAY_BUFFER':
+            return 2;
+        default :
+            return 1;
+    }
+};
+
+export { setHttpConfig, setOptions, judgeMaxContentLength }ÔrFœ­@ohos.file.fs¬@ohos.buffer®@ohos.net.http°@ohos.deviceInfo«../../utils½../../env/classes/FormData.js¼../../../lib/core/AxiosError¿../../../lib/core/buildFullPath­../../LogUtil«./upload.js©./http.js­./download.jsÔrG—ªassertions¨external¢id¤meta±moduleSideEffectsªresolvedByµsyntheticNamedExportsAÃÙ[ hvigor_ignore_D:_ruanjian_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.file.fs.d.tsAÃªoh-resolveÂGAÃÙZ hvigor_ignore_D:_ruanjian_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.buffer.d.tsAÃªoh-resolveÂGAÃÙ\ hvigor_ignore_D:_ruanjian_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.net.http.d.tsAÃªoh-resolveÂGAÃÙ^ hvigor_ignore_D:_ruanjian_DevEco Studio_sdk_default_openharmony_ets_api_@ohos.deviceInfo.d.tsAÃªoh-resolveÂGAÂÙD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\utils.jsAÃªoh-resolveÂGAÂÙœD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\env\classes\FormData.jsAÃªoh-resolveÂGAÂÙ—D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\core\AxiosError.jsAÃªoh-resolveÂGAÂÙšD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\core\buildFullPath.jsAÃªoh-resolveÂGAÂÙD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\LogUtil.jsAÃªoh-resolveÂGAÂÙœD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\upload.jsAÃªoh-resolveÂGAÂÙšD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\http.jsAÃªoh-resolveÂGAÂÙD:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios\src\main\ets\components\lib\adapters\ohos\download.jsAÃªoh-resolveÂ‘ÔrH’§missing¦pluginÃ¦genAbcÂÔ  ÔrI”²dynamicImportCache¹exportAllDeclarationCache»exportNamedDeclarationCache«importCache‘ÔrJ–¤type¥start£end«declarationªspecifiers¦source¶ExportNamedDeclarationÍ-tÍ-¯À“ÔrK•¤type¥start£end¥local¨exported¯ExportSpecifierÍ-}Í-ŠÔrL”¤type¥start£end¤nameªIdentifierÍ-}Í-Š­setHttpConfigLªIdentifierÍ-}Í-Š­setHttpConfigK¯ExportSpecifierÍ-ŒÍ-–LªIdentifierÍ-ŒÍ-–ªsetOptionsLªIdentifierÍ-ŒÍ-–ªsetOptionsK¯ExportSpecifierÍ-˜Í-­LªIdentifierÍ-˜Í-­µjudgeMaxContentLengthLªIdentifierÍ-˜Í-­µjudgeMaxContentLengthÀœÔrM•¤type¥start£endªspecifiers¦source±ImportDeclarationÍ¬ÍÈ‘ÔrN”¤type¥start£end¥local¶ImportDefaultSpecifierÍ³Í·LªIdentifierÍ³Í·¤httpÔrO•¤type¥start£end¥value£raw§LiteralÍ½ÍÈ©./http.js«'./http.js'M±ImportDeclarationÍÊÍî‘N¶ImportDefaultSpecifierÍÑÍÙLªIdentifierÍÑÍÙ¨downloadO§LiteralÍßÍî­./download.js¯'./download.js'M±ImportDeclarationÍğÍ‘N¶ImportDefaultSpecifierÍ÷ÍıLªIdentifierÍ÷Íı¦uploadO§LiteralÍÍ«./upload.js­'./upload.js'M±ImportDeclarationÍÍ1‘N¶ImportDefaultSpecifierÍÍLªIdentifierÍÍ¢fsO§LiteralÍ!Í0­@ohos.file.fs¯'@ohos.file.fs'M±ImportDeclarationÍ3ÍS‘N¶ImportDefaultSpecifierÍ:Í?LªIdentifierÍ:Í?¥utilsO§LiteralÍEÍR«../../utils­'../../utils'M±ImportDeclarationÍUÍw‘N¶ImportDefaultSpecifierÍ\ÍbLªIdentifierÍ\Íb¦bufferO§LiteralÍhÍv¬@ohos.buffer®'@ohos.buffer'M±ImportDeclarationÍyÍœ‘N¶ImportDefaultSpecifierÍ€Í…LªIdentifierÍ€Í…¥_httpO§LiteralÍ‹Í›®@ohos.net.http°'@ohos.net.http'M±ImportDeclarationÍÍÒ‘N¶ImportDefaultSpecifierÍ¥Í­LªIdentifierÍ¥Í­¨FormDataO§LiteralÍ³ÍÒ½../../env/classes/FormData.js¿'../../env/classes/FormData.js'M±ImportDeclarationÍÔÍ	‘N¶ImportDefaultSpecifierÍÛÍåLªIdentifierÍÛÍåªAxiosErrorO§LiteralÍëÍ	¼../../../lib/core/AxiosError¾'../../../lib/core/AxiosError'M±ImportDeclarationÍÍG‘N¶ImportDefaultSpecifierÍÍLªIdentifierÍÍ­buildFullPathO§LiteralÍ%ÍF¿../../../lib/core/buildFullPathÙ!'../../../lib/core/buildFullPath'M±ImportDeclarationÍIÍp‘ÔrP•¤type¥start£end¨imported¥local¯ImportSpecifierÍRÍYLªIdentifierÍRÍY§LogUtilLªIdentifierÍRÍY§LogUtilO§LiteralÍaÍp­../../LogUtil¯'../../LogUtil'M±ImportDeclarationÍrÍœ‘N¶ImportDefaultSpecifierÍyÍƒLªIdentifierÍyÍƒªdeviceInfoO§LiteralÍ‰Í›°@ohos.deviceInfo²'@ohos.deviceInfo'

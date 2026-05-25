@@ -1,0 +1,39 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:github": "tsc -b && vite build --mode github",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router": "^7.6.1",
+    "zustand": "^5.0.5",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-select": "^2.2.5",
+    "@radix-ui/react-tabs": "^1.1.12",
+    "@radix-ui/react-toast": "^1.2.14",
+    "@radix-ui/react-tooltip": "^1.2.7",
+    "lucide-react": "^0.511.0",
+    "clsx": "^2.1.1",
+    "epubjs": "^0.3.93",
+    "pdfjs-dist": "^4.0.379"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5",
+    "@vitejs/plugin-react": "^4.5.2",
+    "typescript": "^5.8.3",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.6",
+    "tailwindcss": "^4.1.7",
+    "@tailwindcss/vite": "^4.1.7",
+    "@tailwindcss/postcss": "^4.1.7",
+    "postcss": "^8.5.4"
+  }
+}

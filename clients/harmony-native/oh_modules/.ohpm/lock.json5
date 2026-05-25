@@ -1,0 +1,42 @@
+{
+  "lockVersion": "1.0",
+  "settings": {
+    "resolveConflict": true,
+    "resolveConflictStrict": false,
+    "installAll": true
+  },
+  "overrides": {},
+  "overrideDependencyMap": {},
+  "modules": {
+    ".": {
+      "name": "",
+      "dependencies": {},
+      "devDependencies": {},
+      "dynamicDependencies": {},
+      "maskedByOverrideDependencyMap": false
+    },
+    "entry": {
+      "name": "entry",
+      "dependencies": {
+        "@ohos/axios": {
+          "specifier": "^2.0.0",
+          "version": "2.2.10"
+        }
+      },
+      "devDependencies": {},
+      "dynamicDependencies": {},
+      "maskedByOverrideDependencyMap": false
+    }
+  },
+  "packages": {
+    "@ohos/axios@2.2.10": {
+      "integrity": "sha512-qmaHcgtIHOz0Ot8KXE8oQM1iIBNMi7atvo5/O9bWznV8RM4o0Bnb7LXttayl4weUqFKxJ37/dVKvEs/YJ/zcaA==",
+      "storePath": "oh_modules/.ohpm/@ohos+axios@2.2.10",
+      "dependencies": {},
+      "dynamicDependencies": {},
+      "dev": false,
+      "dynamic": false,
+      "maskedByOverrideDependencyMap": false
+    }
+  }
+}

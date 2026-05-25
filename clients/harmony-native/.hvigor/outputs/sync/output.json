@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "ohos-module-entry": {
+    "SELECT_TARGET": "default",
+    "MODULE_BUILD_DIR": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build",
+    "TARGETS": {
+      "default": {
+        "SOURCE_ROOT": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\src\\main",
+        "RESOURCES_PATH": [
+          "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\src\\main\\resources"
+        ],
+        "BUILD_PATH": {
+          "OUTPUT_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\outputs\\default",
+          "INTERMEDIA_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates",
+          "JS_ASSETS_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates\\loader_out\\default",
+          "JS_LITE_ASSETS_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates\\loader_out_lite\\default",
+          "RES_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates\\res\\default",
+          "RES_PROFILE_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates\\res\\default\\resources\\base\\profile",
+          "ETS_SUPER_VISUAL_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\cache\\default\\default@CompileArkTS\\esmodule",
+          "JS_SUPER_VISUAL_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\cache\\default\\default@CompileJS\\jsbundle",
+          "WORKER_LOADER": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates\\loader\\default\\loader.json",
+          "MANIFEST_JSON": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates\\manifest\\default",
+          "OUTPUT_METADATA_JSON": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates\\hap_metadata\\default\\output_metadata.json",
+          "SOURCE_MAP_DIR": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry\\build\\default\\intermediates\\source_map\\default"
+        },
+        "BUILD_OPTION": {
+          "debuggable": true
+        }
+      }
+    },
+    "BUILD_OPTION": {
+      "default-default": {
+        "debuggable": true,
+        "copyFrom": "default"
+      }
+    },
+    "BUILD_PROFILE_OPT": {
+      "apiType": "stageMode",
+      "buildOption": {},
+      "targets": [
+        {
+          "name": "default"
+        }
+      ]
+    },
+    "BUILD_CACHE_DIR": ""
+  },
+  "ohos-project": {
+    "SELECT_PRODUCT_NAME": "default",
+    "MODULE_BUILD_DIR": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\build",
+    "BUNDLE_NAME": "com.comicreader.harmony",
+    "VERSION_CODE": 1000000,
+    "VERSION_NAME": "1.0.0",
+    "BUILD_PATH": {
+      "OUTPUT_PATH": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\build\\outputs\\default"
+    },
+    "MODULES": [
+      {
+        "name": "entry",
+        "srcPath": "D:\\GongZuo\\ComicReader\\clients\\harmony-native\\entry",
+        "targets": [
+          {
+            "name": "default",
+            "applyToProducts": [
+              "default"
+            ]
+          }
+        ],
+        "belongProjectPath": "D:\\GongZuo\\ComicReader\\clients\\harmony-native"
+      }
+    ],
+    "PROFILE_OPT": {
+      "app": {
+        "signingConfigs": [
+          {
+            "name": "default",
+            "type": "HarmonyOS",
+            "material": {
+              "certpath": "C:\\Users\\asus\\.ohos\\config\\default_harmony-native_R2tHoRYOjbhhKzga6bF7eakJBgF5W3eOUxTmeY1x3hg=.cer",
+              "keyAlias": "debugKey",
+              "keyPassword": "0000001B85799F54F990D3088D40D0411CDA0A8F1BEB4E39F547E76362D897A6D4B040BE97BE8463CF81B6",
+              "profile": "C:\\Users\\asus\\.ohos\\config\\default_harmony-native_R2tHoRYOjbhhKzga6bF7eakJBgF5W3eOUxTmeY1x3hg=.p7b",
+              "signAlg": "SHA256withECDSA",
+              "storeFile": "C:\\Users\\asus\\.ohos\\config\\default_harmony-native_R2tHoRYOjbhhKzga6bF7eakJBgF5W3eOUxTmeY1x3hg=.p12",
+              "storePassword": "0000001B08E2097C74939EF8DC5596472018C740410DC3CA8AAD391F5A7D11ED1ACB8DE7EE0E2FFB4334D1"
+            }
+          }
+        ],
+        "products": [
+          {
+            "name": "default",
+            "signingConfig": "default",
+            "compatibleSdkVersion": "5.0.0(12)",
+            "targetSdkVersion": "6.1.1(24)",
+            "runtimeOS": "HarmonyOS"
+          }
+        ],
+        "buildModeSet": [
+          {
+            "name": "debug"
+          },
+          {
+            "name": "release"
+          }
+        ]
+      },
+      "modules": [
+        {
+          "name": "entry",
+          "srcPath": "./entry",
+          "targets": [
+            {
+              "name": "default",
+              "applyToProducts": [
+                "default"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "CONFIG_PROPERTIES": {
+      "enableSignTask": true,
+      "skipNativeIncremental": false,
+      "hvigor.keepDependency": true
+    },
+    "OVERALL_PROJECT_PATHS": [
+      "D:\\GongZuo\\ComicReader\\clients\\harmony-native"
+    ],
+    "BUILD_CACHE_DIR": ""
+  }
+}

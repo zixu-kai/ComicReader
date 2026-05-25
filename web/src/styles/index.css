@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #6366f1;
+  --color-primary-hover: #818cf8;
+  --color-primary-dark: #4f46e5;
+  --color-accent-green: #10b981;
+  --color-accent-red: #ef4444;
+  --color-accent-yellow: #f59e0b;
+  --color-accent-blue: #3b82f6;
+}
+
+:root {
+  --bg-base: #030712;
+  --bg-surface: #111827;
+  --bg-surface-hover: #1f2937;
+  --bg-surface-active: #374151;
+  --bg-elevated: #1f2937;
+  --border-default: #1f2937;
+  --border-light: #374151;
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #374151;
+  --scrollbar-thumb-hover: #6b7280;
+  --overlay: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] {
+  --bg-base: #f3f4f6;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f9fafb;
+  --bg-surface-active: #e5e7eb;
+  --bg-elevated: #f9fafb;
+  --border-default: #e5e7eb;
+  --border-light: #d1d5db;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #d1d5db;
+  --scrollbar-thumb-hover: #9ca3af;
+  --overlay: rgba(0, 0, 0, 0.3);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.reader-page {
+  cursor: none;
+}
+
+.reader-page.show-controls {
+  cursor: default;
+}
+
+.comic-cover {
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+}
+
+.progress-bar {
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent-blue));
+  transition: width 0.3s ease;
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.slide-in-left {
+  animation: slideInLeft 0.2s ease-out;
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.reader-image {
+  user-select: none;
+  -webkit-user-drag: none;
+}

@@ -1,0 +1,15 @@
+{
+  "src": [
+    "pages/HomePage",
+    "pages/LibraryPage",
+    "pages/ComicDetailPage",
+    "pages/ComicReaderPage",
+    "pages/BookLibraryPage",
+    "pages/BookDetailPage",
+    "pages/BookReaderPage",
+    "pages/CategoriesPage",
+    "pages/BookmarksPage",
+    "pages/RandomPage",
+    "pages/SettingsPage"
+  ]
+}

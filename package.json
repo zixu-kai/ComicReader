@@ -1,0 +1,27 @@
+{
+  "name": "own-shelf",
+  "version": "0.1.0",
+  "private": true,
+  "description": "本地漫画与图书管理工具 - 私阁 OwnShelf",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
+    "dev:server": "pnpm --filter server dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm --filter shared build && pnpm --filter server build && pnpm --filter web build",
+    "build:server": "pnpm --filter server build",
+    "build:web": "pnpm --filter web build",
+    "build:web:github": "pnpm --filter web build:github"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "esbuild-wasm",
+      "core-js",
+      "es5-ext"
+    ]
+  }
+}
