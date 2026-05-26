@@ -4,6 +4,7 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY web/package.json ./web/
 COPY shared/package.json ./shared/
+COPY server/package.json ./server/
 RUN pnpm install --no-frozen-lockfile
 COPY web/ ./web/
 COPY shared/ ./shared/
@@ -15,6 +16,7 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
+COPY web/package.json ./web/
 RUN pnpm install --no-frozen-lockfile
 COPY server/ ./server/
 COPY shared/ ./shared/
@@ -27,6 +29,7 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
+COPY web/package.json ./web/
 RUN pnpm install --no-frozen-lockfile --prod
 RUN npm rebuild sharp @libsql/client
 RUN apk del vips-dev python3 make g++

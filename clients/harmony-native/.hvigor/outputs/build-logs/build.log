@@ -19909,3 +19909,138 @@ Require stack:
 [2026-05-23T22:26:54.526] [DEBUG] debug-file - watch worker: worker id should be larger than 0. Nothing will be sent to any worker thread.
 [2026-05-23T22:26:54.526] [DEBUG] debug-file - watch worker: worker id should be larger than 0. Nothing will be sent to any worker thread.
 [2026-05-23T22:26:54.527] [DEBUG] debug-file - worker[14] exits with exit code 1.
+[2026-05-26T17:15:58.397] [DEBUG] debug-file - java daemon tryConnect failed Error: connect ECONNREFUSED 127.0.0.1:45050
+[2026-05-26T17:15:58.503] [DEBUG] debug-file - java daemon started at port 45050 pid 17972
+[2026-05-26T17:15:58.879] [DEBUG] debug-file - javaProcess on stderr
+[2026-05-26T17:15:58.880] [DEBUG] debug-file - javaProcess on stderr
+[2026-05-26T17:15:58.887] [DEBUG] debug-file - java daemon started at port 45051 pid 30084
+[2026-05-26T17:15:58.890] [DEBUG] debug-file - javaProcess on stderr
+[2026-05-26T17:15:58.900] [DEBUG] debug-file - java daemon exit code:0 signal:null
+[2026-05-26T17:15:53.309] [DEBUG] debug-file - env: nodejsVersion=v18.20.1
+[2026-05-26T17:15:53.602] [DEBUG] debug-file - env: daemon=true
+[2026-05-26T17:15:53.311] [DEBUG] debug-file - env: hvigor-config.json5 content = { modelVersion: '6.1.1', dependencies: {} }
+[2026-05-26T17:15:59.657] [DEBUG] debug-file - session manager: set active socket. socketId=E-vDE55kFYSjP88nAAAB
+[2026-05-26T17:15:59.706] [DEBUG] debug-file - watch worker: worker id should be larger than 0. Nothing will be sent to any worker thread.
+[2026-05-26T17:15:59.716] [DEBUG] debug-file - Since there is no instance or instance is terminated, create a new worker pool.
+[2026-05-26T17:15:59.718] [DEBUG] debug-file - Worker pool is initialized with config:  {
+  minPoolNum: 2,
+  maxPoolNum: undefined,
+  maxCoreSize: undefined,
+  cacheCapacity: undefined,
+  cacheTtl: undefined
+}
+[2026-05-26T17:15:59.720] [DEBUG] debug-file - Create  resident worker with id: 0.
+[2026-05-26T17:15:59.723] [DEBUG] debug-file - Create  resident worker with id: 1.
+[2026-05-26T17:15:59.728] [DEBUG] debug-file - Workers' log level updated to INFO
+[2026-05-26T17:15:59.747] [DEBUG] debug-file - Hvigor init with startParameters:{
+  hvigorfileTypeCheck: false,
+  parallelExecution: true,
+  incrementalExecution: true,
+  printStackTrace: false,
+  daemon: true,
+  analyze: 0,
+  logLevel: Level { level: 20000, levelStr: 'INFO', colour: 'green' },
+  optimizationStrategy: 'memory',
+  hotCompile: undefined,
+  hotReloadBuild: undefined,
+  customizedParam: undefined
+}
+[2026-05-26T17:15:59.813] [DEBUG] debug-file - Cache service initialization finished in 66 ms 
+[2026-05-26T17:15:59.817] [DEBUG] debug-file - hvigorfile, resolving D:\GongZuo\ComicReader\clients\harmony-native\hvigorfile.ts
+[2026-05-26T17:16:34.777] [DEBUG] debug-file - hvigorfile, require result:  { default: { plugins: [] } }
+[2026-05-26T17:16:34.777] [DEBUG] debug-file - hvigorfile, binding system plugins null
+[2026-05-26T17:16:34.778] [DEBUG] debug-file - Starting plugin build process
+[2026-05-26T17:16:34.778] [DEBUG] debug-file - App plugin prepare start...
+[2026-05-26T17:16:34.778] [DEBUG] debug-file - App plugin prepare end...
+[2026-05-26T17:16:34.779] [DEBUG] debug-file - App plugin creating...
+[2026-05-26T17:16:35.078] [DEBUG] debug-file - App plugin register hook start...
+[2026-05-26T17:16:35.079] [DEBUG] debug-file - App plugin register hook end...
+[2026-05-26T17:16:35.079] [DEBUG] debug-file - Plugin build process completed
+[2026-05-26T17:16:35.081] [DEBUG] debug-file - Start initialize project's product build option map with build mode debug.
+[2026-05-26T17:16:35.081] [DEBUG] debug-file - Picking option from product 'default' with build mode 'debug'.
+[2026-05-26T17:16:35.082] [DEBUG] debug-file - Product 'default' build option initialized
+[2026-05-26T17:16:35.082] [DEBUG] debug-file - End initialize project's product build option map with build mode 'debug'.
+[2026-05-26T17:16:35.084] [DEBUG] debug-file - Obtain build option for product 'default'in this build.
+[2026-05-26T17:16:35.086] [DEBUG] debug-file - D:\GongZuo\ComicReader\clients\harmony-native\build\cache\default\remote_hsp\remoteHspCache.json not exists.
+[2026-05-26T17:16:35.089] [DEBUG] debug-file - Local scan or download HarmonyOS sdk components toolchains,ets,js,native,previewer
+[2026-05-26T17:16:35.096] [DEBUG] debug-file - Local scan or download hmscore sdk components toolchains,ets,native
+[2026-05-26T17:16:35.101] [DEBUG] debug-file - Start recording SDK configuration permission data.
+[2026-05-26T17:16:35.177] [DEBUG] debug-file - Sdk init in 90 ms 
+[2026-05-26T17:16:35.183] [DEBUG] debug-file - Project task initialization takes 6 ms 
+[2026-05-26T17:16:35.183] [DEBUG] debug-file - hvigorfile, begin to bind custom plugins...
+[2026-05-26T17:16:35.183] [DEBUG] debug-file - hvigorfile, no custom plugins were found in D:\GongZuo\ComicReader\clients\harmony-native\hvigorfile.ts
+[2026-05-26T17:16:35.183] [DEBUG] debug-file - hvigorfile, resolve finished D:\GongZuo\ComicReader\clients\harmony-native\hvigorfile.ts
+[2026-05-26T17:16:35.185] [DEBUG] debug-file - hvigorfile, resolving D:\GongZuo\ComicReader\clients\harmony-native\entry\hvigorfile.ts
+[2026-05-26T17:16:35.192] [DEBUG] debug-file - hvigorfile, require result:  { default: { plugins: [] } }
+[2026-05-26T17:16:35.192] [DEBUG] debug-file - hvigorfile, binding system plugins null
+[2026-05-26T17:16:35.192] [DEBUG] debug-file - Starting plugin build process
+[2026-05-26T17:16:35.192] [DEBUG] debug-file - Hap plugin creating...
+[2026-05-26T17:16:35.194] [DEBUG] debug-file - failed to load cangjie to dynamically generate schemas: Error: Cannot find module '@ohos/cangjie-build-support/index'
+Require stack:
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor-ohos-plugin\src\plugin\hooks\cangjie-register.js
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor-ohos-plugin\src\plugin\strategy\stage-init-strategy.js
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor-ohos-plugin\src\plugin\builder\abstract-plugin-builder.js
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor-ohos-plugin\src\plugin\builder\app-plugin-builder.js
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor-ohos-plugin\src\plugin\factory\plugin-factory.js
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor-ohos-plugin\index.js
+- D:\GongZuo\ComicReader\clients\harmony-native\hvigorfile.ts
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor\src\base\internal\lifecycle\configuration.js
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor\src\base\boot\index.js
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor\src\base\daemon\cluster\worker-process-lifecycle.js
+- D:\ruanjian\DevEco Studio\tools\hvigor\hvigor\src\base\daemon\process\daemon-process-boot-script.js
+[2026-05-26T17:16:35.207] [DEBUG] debug-file - Start initialize module-target build option map, moduleName=entry, buildMode=debug
+[2026-05-26T17:16:35.208] [DEBUG] debug-file - Target 'default' config initialized
+[2026-05-26T17:16:35.208] [DEBUG] debug-file - Module 'entry' target 'default' build option initialized
+[2026-05-26T17:16:35.208] [DEBUG] debug-file - End initialize module-target build option map, moduleName=entry
+[2026-05-26T17:16:35.209] [DEBUG] debug-file - Start initialize module-target build option map, moduleName=entry, buildMode=release
+[2026-05-26T17:16:35.209] [DEBUG] debug-file - Target 'default' config initialized
+[2026-05-26T17:16:35.209] [DEBUG] debug-file - Module 'entry' target 'default' build option initialized
+[2026-05-26T17:16:35.209] [DEBUG] debug-file - End initialize module-target build option map, moduleName=entry
+[2026-05-26T17:16:35.209] [DEBUG] debug-file - Start initialize module-target build option map, moduleName=entry, buildMode=debug
+[2026-05-26T17:16:35.210] [DEBUG] debug-file - Target 'default' config initialized
+[2026-05-26T17:16:35.210] [DEBUG] debug-file - Module 'entry' target 'default' build option initialized
+[2026-05-26T17:16:35.210] [DEBUG] debug-file - End initialize module-target build option map, moduleName=entry
+[2026-05-26T17:16:35.210] [DEBUG] debug-file - Obtain build option for module 'entry' target 'default'in this build.
+[2026-05-26T17:16:35.218] [DEBUG] debug-file - Module entry task initialization takes 7 ms 
+[2026-05-26T17:16:35.218] [DEBUG] debug-file - Hap plugin register hook start...
+[2026-05-26T17:16:35.218] [DEBUG] debug-file - Hap plugin register hook end...
+[2026-05-26T17:16:35.218] [DEBUG] debug-file - Plugin build process completed
+[2026-05-26T17:16:35.218] [DEBUG] debug-file - hvigorfile, begin to bind custom plugins...
+[2026-05-26T17:16:35.218] [DEBUG] debug-file - hvigorfile, no custom plugins were found in D:\GongZuo\ComicReader\clients\harmony-native\entry\hvigorfile.ts
+[2026-05-26T17:16:35.218] [DEBUG] debug-file - hvigorfile, resolve finished D:\GongZuo\ComicReader\clients\harmony-native\entry\hvigorfile.ts
+[2026-05-26T17:16:35.249] [DEBUG] debug-file - hvigorfile, resolve hvigorfile dependencies in 30 ms 
+[2026-05-26T17:16:35.249] [DEBUG] debug-file - project has submodules:entry
+[2026-05-26T17:16:35.261] [DEBUG] debug-file - start to load updatedOhPackageInfo to the disk
+[2026-05-26T17:16:35.282] [DEBUG] debug-file - load to the disk finished
+[2026-05-26T17:16:35.284] [DEBUG] debug-file - Start to initialize dependency information.
+[2026-05-26T17:16:35.286] [DEBUG] debug-file - Module harmony-native Collected Dependency: 
+[2026-05-26T17:16:35.286] [DEBUG] debug-file - Module harmony-native's total dependency: 0
+[2026-05-26T17:16:35.288] [DEBUG] debug-file - Start to initialize dependency information.
+[2026-05-26T17:16:35.322] [DEBUG] debug-file - Module entry Collected Dependency: D:\GongZuo\ComicReader\clients\harmony-native\oh_modules\.ohpm\@ohos+axios@2.2.10\oh_modules\@ohos\axios
+[2026-05-26T17:16:35.322] [DEBUG] debug-file - Module entry's total dependency: 1
+[2026-05-26T17:16:35.326] [DEBUG] debug-file - Configuration phase cost:35 s 513 ms 
+[2026-05-26T17:16:35.329] [DEBUG] debug-file - Configuration task cost before running: 35 s 600 ms 
+[2026-05-26T17:16:35.329] [DEBUG] debug-file - Executing task :entry:init
+[2026-05-26T17:16:35.330] [DEBUG] debug-file - entry : init cost memory 0.0164642333984375
+[2026-05-26T17:16:35.330] [DEBUG] debug-file - runTaskFromQueue task cost before running: 35 s 601 ms 
+[2026-05-26T17:16:35.331] [INFO] debug-file - Finished :entry:init... after 1 ms 
+[2026-05-26T17:16:35.331] [DEBUG] debug-file - Executing task ::init
+[2026-05-26T17:16:35.331] [DEBUG] debug-file - harmony-native : init cost memory 0.014190673828125
+[2026-05-26T17:16:35.331] [DEBUG] debug-file - runTaskFromQueue task cost before running: 35 s 603 ms 
+[2026-05-26T17:16:35.331] [INFO] debug-file - Finished ::init... after 1 ms 
+[2026-05-26T17:16:35.346] [DEBUG] debug-file - Obtain build option for module 'entry' target 'default'in this build.
+[2026-05-26T17:16:35.354] [DEBUG] debug-file - Cleanup worker 0.
+[2026-05-26T17:16:35.355] [DEBUG] debug-file - Worker 0 has been cleaned up.
+[2026-05-26T17:16:35.355] [DEBUG] debug-file - Current idle worker size: 1.
+[2026-05-26T17:16:35.355] [DEBUG] debug-file - Current resident worker size: 2.
+[2026-05-26T17:16:35.355] [DEBUG] debug-file - Cleanup worker 1.
+[2026-05-26T17:16:35.355] [DEBUG] debug-file - Worker 1 has been cleaned up.
+[2026-05-26T17:16:35.355] [DEBUG] debug-file - Current idle worker size: 0.
+[2026-05-26T17:16:35.355] [DEBUG] debug-file - Current resident worker size: 2.
+[2026-05-26T17:16:35.357] [DEBUG] debug-file - hvigor build process will be closed.
+[2026-05-26T17:16:35.360] [DEBUG] debug-file - worker[0] exits with exit code 1.
+[2026-05-26T17:16:35.362] [DEBUG] debug-file - session manager: send message to worker process.
+[2026-05-26T17:16:35.363] [DEBUG] debug-file - session manager: send message to worker process.
+[2026-05-26T17:16:35.360] [DEBUG] debug-file - worker[1] exits with exit code 1.
+[2026-05-26T17:16:35.364] [DEBUG] debug-file - watch worker: worker id should be larger than 0. Nothing will be sent to any worker thread.
+[2026-05-26T17:16:35.364] [DEBUG] debug-file - watch worker: worker id should be larger than 0. Nothing will be sent to any worker thread.
