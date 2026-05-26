@@ -6,7 +6,7 @@ COPY shared/package.json ./shared/
 COPY server/package.json ./server/
 COPY .npmrc ./
 RUN npm install -g pnpm@11
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm --version && pnpm install --no-frozen-lockfile
 COPY web/ ./web/
 COPY shared/ ./shared/
 RUN pnpm --filter web build
@@ -19,7 +19,7 @@ COPY shared/package.json ./shared/
 COPY web/package.json ./web/
 COPY .npmrc ./
 RUN npm install -g pnpm@11
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm --version && pnpm install --no-frozen-lockfile
 COPY server/ ./server/
 COPY shared/ ./shared/
 RUN pnpm --filter server build
