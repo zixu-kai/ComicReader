@@ -1,37 +1,31 @@
 FROM node:22-bookworm-slim AS web-builder
 WORKDIR /app
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json ./
 COPY web/package.json ./web/
 COPY shared/package.json ./shared/
 COPY server/package.json ./server/
-COPY .npmrc ./
-RUN npm install -g pnpm@11
-RUN pnpm --version && pnpm install --no-frozen-lockfile
+RUN npm install
 COPY web/ ./web/
 COPY shared/ ./shared/
-RUN pnpm --filter web build
+RUN npm run build -w web
 
 FROM node:22-bookworm-slim AS server-builder
 WORKDIR /app
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
 COPY web/package.json ./web/
-COPY .npmrc ./
-RUN npm install -g pnpm@11
-RUN pnpm --version && pnpm install --no-frozen-lockfile
+RUN npm install
 COPY server/ ./server/
 COPY shared/ ./shared/
-RUN pnpm --filter server build
+RUN npm run build -w server
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
-COPY --from=server-builder /app/node_modules ./node_modules
-RUN npm install -g pnpm@11
+COPY package.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
-COPY .npmrc ./
-RUN pnpm prune --prod
+RUN npm install --omit=dev
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/drizzle ./server/drizzle
 COPY --from=web-builder /app/server/static ./server/static

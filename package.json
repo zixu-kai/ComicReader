@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "本地漫画与图书管理工具 - 私阁 OwnShelf",
+  "workspaces": ["web", "server", "shared"],
   "scripts": {
     "dev": "concurrently \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
     "dev:server": "pnpm --filter server dev",
