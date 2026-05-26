@@ -1,40 +1,39 @@
-FROM node:22-alpine AS web-builder
-RUN apk add --no-cache python3 make g++
-RUN npm install -g pnpm@10
+FROM node:22-bookworm-slim AS web-builder
 WORKDIR /app
-COPY .npmrc package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml ./
 COPY web/package.json ./web/
 COPY shared/package.json ./shared/
 COPY server/package.json ./server/
-RUN pnpm install --no-frozen-lockfile 2>&1
+COPY .npmrc ./
+RUN npm install -g pnpm@11
+RUN pnpm install --no-frozen-lockfile
 COPY web/ ./web/
 COPY shared/ ./shared/
 RUN pnpm --filter web build
 
-FROM node:22-alpine AS server-builder
-RUN apk add --no-cache python3 make g++
-RUN npm install -g pnpm@10
+FROM node:22-bookworm-slim AS server-builder
 WORKDIR /app
-COPY .npmrc package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
 COPY web/package.json ./web/
-RUN pnpm install --no-frozen-lockfile 2>&1
+COPY .npmrc ./
+RUN npm install -g pnpm@11
+RUN pnpm install --no-frozen-lockfile
 COPY server/ ./server/
 COPY shared/ ./shared/
 RUN pnpm --filter server build
 
-FROM node:22-alpine AS runtime
-RUN apk add --no-cache vips vips-dev python3 make g++ su-exec
-RUN npm install -g pnpm@10
+FROM node:22-bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends su-exec && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY .npmrc package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
 COPY web/package.json ./web/
-RUN pnpm install --no-frozen-lockfile --prod 2>&1
-RUN npm rebuild sharp @libsql/client
-RUN apk del vips-dev python3 make g++
+COPY .npmrc ./
+RUN npm install -g pnpm@11
+RUN pnpm install --no-frozen-lockfile --prod
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/drizzle ./server/drizzle
 COPY --from=web-builder /app/server/static ./server/static
