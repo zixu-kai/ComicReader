@@ -26,13 +26,12 @@ RUN pnpm --filter server build
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
-COPY package.json pnpm-workspace.yaml ./
+COPY --from=server-builder /app/node_modules ./node_modules
+RUN npm install -g pnpm@11
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
-COPY web/package.json ./web/
 COPY .npmrc ./
-RUN npm install -g pnpm@11
-RUN pnpm install --no-frozen-lockfile --prod
+RUN pnpm prune --prod
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/drizzle ./server/drizzle
 COPY --from=web-builder /app/server/static ./server/static
