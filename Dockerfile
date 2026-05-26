@@ -1,35 +1,38 @@
 FROM node:22-alpine AS web-builder
 RUN apk add --no-cache python3 make g++
-RUN npm install -g pnpm@11.1.2
+RUN corepack disable && npm install -g pnpm@11.1.2
 WORKDIR /app
 COPY .npmrc package.json pnpm-workspace.yaml ./
 COPY web/package.json ./web/
 COPY shared/package.json ./shared/
-RUN pnpm install --no-frozen-lockfile 2>&1
+COPY server/package.json ./server/
+RUN pnpm install --no-frozen-lockfile --reporter append-only 2>&1
 COPY web/ ./web/
 COPY shared/ ./shared/
 RUN pnpm --filter web build
 
 FROM node:22-alpine AS server-builder
 RUN apk add --no-cache python3 make g++
-RUN npm install -g pnpm@11.1.2
+RUN corepack disable && npm install -g pnpm@11.1.2
 WORKDIR /app
 COPY .npmrc package.json pnpm-workspace.yaml ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
-RUN pnpm install --no-frozen-lockfile 2>&1
+COPY web/package.json ./web/
+RUN pnpm install --no-frozen-lockfile --reporter append-only 2>&1
 COPY server/ ./server/
 COPY shared/ ./shared/
 RUN pnpm --filter server build
 
 FROM node:22-alpine AS runtime
 RUN apk add --no-cache vips vips-dev python3 make g++ su-exec
-RUN npm install -g pnpm@11.1.2
+RUN corepack disable && npm install -g pnpm@11.1.2
 WORKDIR /app
 COPY .npmrc package.json pnpm-workspace.yaml ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
-RUN pnpm install --no-frozen-lockfile --prod 2>&1
+COPY web/package.json ./web/
+RUN pnpm install --no-frozen-lockfile --prod --reporter append-only 2>&1
 RUN apk del vips-dev python3 make g++
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/drizzle ./server/drizzle
