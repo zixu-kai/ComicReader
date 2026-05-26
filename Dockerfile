@@ -25,7 +25,6 @@ COPY shared/ ./shared/
 RUN pnpm --filter server build
 
 FROM node:22-bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends su-exec && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml ./
 COPY server/package.json ./server/
