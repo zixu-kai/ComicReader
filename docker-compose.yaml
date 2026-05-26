@@ -1,6 +1,6 @@
 services:
   ownshelf:
-    image: ghcr.io/zixu-kai/ComicReader:latest
+    image: ghcr.io/zixu-kai/comicreader:latest
     container_name: ownshelf
     pull_policy: always
     ports:
