@@ -18,14 +18,14 @@ COPY web/package.json ./web/
 RUN npm install
 COPY server/ ./server/
 COPY shared/ ./shared/
-RUN npm run build -w server
+RUN npm run build -w server && npm prune --omit=dev
 
 FROM node:22-bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY package.json ./
-COPY server/package.json ./server/
-COPY shared/package.json ./shared/
-RUN npm install --omit=dev
+COPY --from=server-builder /app/package.json ./package.json
+COPY --from=server-builder /app/node_modules ./node_modules
+COPY --from=server-builder /app/server/package.json ./server/package.json
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/drizzle ./server/drizzle
 COPY --from=web-builder /app/server/static ./server/static

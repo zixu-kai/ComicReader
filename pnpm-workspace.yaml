@@ -2,6 +2,8 @@ packages:
   - 'server'
   - 'web'
   - 'shared'
+allowBuilds:
+  esbuild: true
 onlyBuiltDependencies:
   - esbuild
   - sharp

@@ -12,3 +12,7 @@ scripts/
 *.tar
 .DS_Store
 Thumbs.db
+
+# HarmonyOS/Hvigor 构建输出
+clients/harmony-native/.hvigor/
+clients/harmony-native/entry/build/

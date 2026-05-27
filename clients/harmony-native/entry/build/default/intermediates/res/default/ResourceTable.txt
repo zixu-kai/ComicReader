@@ -1,7 +1,0 @@
-string ability_desc 0x01000002
-string app_name 0x01000000
-string module_desc 0x01000003
-string page_show 0x01000006
-color start_window_background 0x01000004
-media app_icon 0x01000001
-profile main_pages 0x01000005

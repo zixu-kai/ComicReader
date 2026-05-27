@@ -30,8 +30,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/own-shelf.git
-cd own-shelf
+git clone https://github.com/zixu-kai/ComicReader.git
+cd ComicReader
 
 # 安装依赖
 pnpm install
@@ -114,8 +114,10 @@ OwnShelf/
 | `COMICS_DIR` | 漫画文件存放目录 | `./comics` |
 | `BOOKS_DIR` | 电子书文件存放目录 | `./books` |
 | `DB_PATH` | SQLite 数据库文件路径 | `./data/ownshelf.db` |
+| `COVERS_DIR` | 封面缓存目录 | `./data/covers` |
 | `JWT_SECRET` | JWT 签名密钥（**生产环境务必修改**） | `change-me-in-production` |
-| `SCAN_INTERVAL` | 自动扫描间隔（毫秒） | `300000`（5 分钟） |
+| `PUID` | 运行用户 UID（留空则以 root 运行） | 空 |
+| `PGID` | 运行用户 GID（留空则以 root 运行） | 空 |
 
 > **⚠️ 安全提醒**：`JWT_SECRET` 在生产环境中必须修改为随机字符串，否则存在安全隐患。
 
@@ -193,42 +195,77 @@ pnpm preview          # 预览生产构建结果
 
 ## 🐳 Docker 部署
 
-项目提供了两种 Docker 部署方式，适用于不同 NAS 系统。
+### 方式一：本地文件部署（推荐 NAS 用户）
 
-### 通用部署（群晖 / 威联通 / 命令行 Docker）
+适用于绿联、群晖、威联通等 NAS，或任何支持 Docker Compose 的环境。
+
+1. 从 [Releases](https://github.com/zixu-kai/ComicReader/releases) 下载最新版压缩包
+2. 解压后上传到 NAS（如绿联上传到 `/volume1/docker/ownshelf/`）
+3. 修改 `docker-compose.yaml` 中的卷映射路径和 `JWT_SECRET`
+4. 在 Docker 管理器中选择 `docker-compose.yaml` 部署
+
+### 方式二：GitHub 镜像部署
+
+项目通过 GitHub Actions 自动构建 Docker 镜像并推送到 GHCR：
 
 ```bash
-# 进入 release 目录下的 nas 文件夹
-cd release/OwnShelf-v1.0.0/nas
-
-# 修改 docker-compose.yml 中的挂载路径和 JWT_SECRET
-
-# 构建并启动（--no-cache 确保从头构建）
-docker compose down
-docker compose build --no-cache
-docker compose up -d
+docker pull ghcr.io/zixu-kai/comicreader:latest
 ```
 
 ### 绿联（UGREEN）NAS 部署
 
 绿联使用可视化 Docker 管理，**必须使用 `docker-compose.yaml` 文件**（`.yaml` 后缀）：
 
-1. 将 `release/OwnShelf-v1.0.0/nas-nodonate` 文件夹完整复制到 NAS
-2. 打开绿联 Docker → 停止并删除已有的 ownshelf 容器和镜像
-3. 使用「项目」或「docker-compose」功能，选择复制过去的文件夹
+1. 将 `nas-nodonate` 文件夹完整上传到 NAS
+2. 打开绿联 Docker 管理器 → 停止并删除已有的 ownshelf 容器和镜像
+3. 使用「项目」或「docker-compose」功能，选择上传的文件夹
 4. 绿联会识别 `docker-compose.yaml` 并自动构建镜像、启动容器
+5. 在绿联 Docker 管理器中修改卷映射路径为你实际的漫画/小说目录
+6. 访问 `http://NAS的IP:7788` 打开页面，点击扫描按钮开始扫描
 
 > **重要**：每次更新代码后，必须先删除旧镜像再重新部署，否则绿联会使用缓存的旧镜像。
 
-### 配置说明
+### docker-compose.yaml 配置说明
 
-部署前请修改 `docker-compose.yml`（或 `.yaml`）中的以下配置：
+```yaml
+services:
+  ownshelf:
+    build: .
+    container_name: ownshelf
+    ports:
+      - "7788:7788"
+    volumes:
+      - ./data:/app/data          # 数据库和封面缓存（勿改）
+      - /volume1/comics:/comics   # 改为你的漫画目录路径
+      - /volume1/books:/books     # 改为你的小说目录路径
+    environment:
+      - COMICS_DIR=/comics
+      - BOOKS_DIR=/books
+      - DB_PATH=/app/data/ownshelf.db
+      - COVERS_DIR=/app/data/covers
+      - HOST=0.0.0.0
+      - PORT=7788
+      - JWT_SECRET=change-me-in-production  # 务必修改为随机字符串
+      - PUID=                    # 留空以 root 运行，或填入用户 UID
+      - PGID=                    # 留空以 root 运行，或填入用户 GID
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+```
 
 | 配置项 | 说明 |
 |--------|------|
-| `JWT_SECRET` | 务必修改为随机字符串 |
-| `/volume1/comics` | 改为你的漫画存放路径 |
+| `JWT_SECRET` | **务必修改**为随机字符串 |
+| `/volume1/comics` | 改为你的漫画存放路径（绿联 NAS 通常为 `/volume1/共享文件夹名`） |
 | `/volume1/books` | 改为你的图书存放路径 |
+| `PUID` / `PGID` | 留空以 root 运行；填入 UID:GID 可降权运行（需确保该用户有权限读取漫画/小说目录） |
+
+### 支持的文件格式
+
+| 类型 | 支持格式 |
+|------|---------|
+| 漫画 | CBZ、ZIP、图片文件夹（JPG/PNG/WebP/GIF 等） |
+| 小说 | EPUB、PDF、TXT |
 
 ### 更新部署
 
@@ -238,8 +275,6 @@ docker compose down
 docker compose build --no-cache
 docker compose up -d
 ```
-
-详细部署说明请参考[发布版文档](release/OwnShelf-v1.0.0/README.md)。
 
 ---
 

@@ -10,6 +10,5 @@ export default defineConfig({
   sourcemap: true,
   dts: false,
   bundle: true,
-  noExternal: ['fastify', '@fastify/cors', '@fastify/static', '@fastify/multipart', 'drizzle-orm', 'jsonwebtoken', 'dotenv', 'archiver', 'adm-zip', 'fast-xml-parser'],
-  external: ['sharp', '@libsql/client'],
+  external: ['sharp', '@libsql/client', 'fastify', '@fastify/cors', '@fastify/static', '@fastify/multipart', 'drizzle-orm', 'jsonwebtoken', 'dotenv', 'archiver', 'adm-zip', 'fast-xml-parser'],
 })
