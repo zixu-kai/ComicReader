@@ -13,14 +13,6 @@ import type {
   ComicStatus,
   ReadingStatus,
   FileType,
-  Book,
-  BookFormat,
-  BookRating,
-  BookReadingProgress,
-  BookNote,
-  BookBookmark,
-  BookQueryParams,
-  BookScanResult,
 } from 'shared/types'
 
 export type {
@@ -38,12 +30,4 @@ export type {
   ComicStatus,
   ReadingStatus,
   FileType,
-  Book,
-  BookFormat,
-  BookRating,
-  BookReadingProgress,
-  BookNote,
-  BookBookmark,
-  BookQueryParams,
-  BookScanResult,
 }

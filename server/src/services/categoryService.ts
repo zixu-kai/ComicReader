@@ -1,8 +1,8 @@
-import { eq, asc, sql, ne } from 'drizzle-orm'
+import { eq, asc, sql } from 'drizzle-orm'
 import { db, schema } from '@/db/index.js'
 import type { Category } from '@/types/index.js'
 
-const { categories, comicCategories, bookCategories } = schema
+const { categories, comicCategories } = schema
 
 export const categoryService = {
   async getCategories(includeHidden = false): Promise<Category[]> {
@@ -15,13 +15,7 @@ export const categoryService = {
       .from(comicCategories)
       .groupBy(comicCategories.categoryId)
 
-    const bookCounts = await db
-      .select({ categoryId: bookCategories.categoryId, count: sql<number>`count(*)` })
-      .from(bookCategories)
-      .groupBy(bookCategories.categoryId)
-
     const comicCountMap = new Map(comicCounts.map(c => [c.categoryId, c.count]))
-    const bookCountMap = new Map(bookCounts.map(c => [c.categoryId, c.count]))
 
     const categoryMap = new Map<number, Category>()
     const roots: Category[] = []
@@ -30,7 +24,6 @@ export const categoryService = {
       const cat: Category = {
         ...row,
         comicCount: comicCountMap.get(row.id) || 0,
-        bookCount: bookCountMap.get(row.id) || 0,
         children: [],
       }
       categoryMap.set(row.id, cat)

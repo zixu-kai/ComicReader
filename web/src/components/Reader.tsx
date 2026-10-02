@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
+import clsx from 'clsx'
 import { useReaderStore } from '@/stores/readerStore'
 import { useKeyboard } from '@/hooks/useKeyboard'
 import { chaptersApi, progressApi } from '@/services/api'
@@ -61,6 +62,7 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
   const [showToc, setShowToc] = useState(false)
+  const [showControls, setShowControls] = useState(true)
   const [allChapters, setAllChapters] = useState<Chapter[]>([])
   const [boundaryMsg, setBoundaryMsg] = useState<string | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -80,7 +82,6 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
   })
 
   const boundaryTriggeredRef = useRef<'next' | 'prev' | null>(null)
-  const boundaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const editModeRef = useRef(false)
   editModeRef.current = editMode
@@ -109,11 +110,13 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
 
       if (pageParam === 'last') {
         startPage = totalPages
+      } else if (pageParam && !isNaN(parseInt(pageParam, 10))) {
+        startPage = Math.min(Math.max(parseInt(pageParam, 10), 1), totalPages)
       } else {
         try {
           const progress = await progressApi.get(comicId)
           if (progress && progress.chapterId === chapterId) {
-            startPage = progress.currentPage
+            startPage = Math.max(1, progress.currentPage)
           }
         } catch {}
       }
@@ -124,6 +127,15 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     }
     initChapter()
   }, [comicId, chapterId, totalPages])
+
+  // 记忆上次阅读位置（章节+页码），供首页"继续上次阅读"使用
+  useEffect(() => {
+    if (!editModeRef.current && currentPage > 0 && chapterId) {
+      try {
+        localStorage.setItem('ownShelfLastRead', JSON.stringify({ comicId, chapterId, page: currentPage, at: Date.now() }))
+      } catch {}
+    }
+  }, [comicId, chapterId, currentPage])
 
   useEffect(() => {
     setImageErrors(new Set())
@@ -173,17 +185,8 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     const step = readerMode === 'double' ? 2 : 1
     const nextPageNum = currentPage + step
     if (nextPageNum > effectiveTotalPages) {
-      if (boundaryTriggeredRef.current === 'next') {
-        handleNextChapter()
-        boundaryTriggeredRef.current = null
-      } else {
-        setBoundaryMsg('已到本章末尾，再次翻页进入下一章')
-        boundaryTriggeredRef.current = 'next'
-        if (boundaryTimerRef.current) clearTimeout(boundaryTimerRef.current)
-        boundaryTimerRef.current = setTimeout(() => {
-          boundaryTriggeredRef.current = null
-        }, 5000)
-      }
+      handleNextChapter()
+      boundaryTriggeredRef.current = null
     } else {
       goToPage(nextPageNum)
       boundaryTriggeredRef.current = null
@@ -195,17 +198,8 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     const step = readerMode === 'double' ? 2 : 1
     const prevPageNum = currentPage - step
     if (prevPageNum < 1) {
-      if (boundaryTriggeredRef.current === 'prev') {
-        handlePrevChapter()
-        boundaryTriggeredRef.current = null
-      } else {
-        setBoundaryMsg('已到本章开头，再次翻页进入上一章')
-        boundaryTriggeredRef.current = 'prev'
-        if (boundaryTimerRef.current) clearTimeout(boundaryTimerRef.current)
-        boundaryTimerRef.current = setTimeout(() => {
-          boundaryTriggeredRef.current = null
-        }, 5000)
-      }
+      handlePrevChapter()
+      boundaryTriggeredRef.current = null
     } else {
       goToPage(Math.max(1, prevPageNum))
       boundaryTriggeredRef.current = null
@@ -223,6 +217,7 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     if (editModeRef.current) return
     if (isScrollMode) return
     if (isSlideMode) return
+    if (zoom > 100) return // 放大时用于平移查看，不翻页
     if (isSwipingRef.current) { isSwipingRef.current = false; return }
 
     const rect = e.currentTarget.getBoundingClientRect()
@@ -234,8 +229,10 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
       readingDirection === 'rtl' ? handleNextPage() : handlePrevPage()
     } else if (x > width - clickZone) {
       readingDirection === 'rtl' ? handlePrevPage() : handleNextPage()
+    } else {
+      setShowControls(prev => !prev)
     }
-  }, [readingDirection, handleNextPage, handlePrevPage, isScrollMode, isSlideMode])
+  }, [readingDirection, handleNextPage, handlePrevPage, isScrollMode, isSlideMode, zoom])
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0]
@@ -260,11 +257,13 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     if (!touchStartRef.current) return
     if (editModeRef.current) return
     if (isScrollMode) return
+    if (zoom > 100) { touchStartRef.current = null; return } // 放大时允许触摸平移，不翻页
 
     const changedTouch = e.changedTouches[0]
     if (!changedTouch) return
 
     const dx = changedTouch.clientX - touchStartRef.current.x
+    const startX = touchStartRef.current.x
     touchStartRef.current = null
 
     if (isSlideMode) {
@@ -273,6 +272,12 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
           readingDirection === 'rtl' ? handleNextPage() : handlePrevPage()
         } else {
           readingDirection === 'rtl' ? handlePrevPage() : handleNextPage()
+        }
+      } else if (Math.abs(dx) < 10) {
+        const screenW = window.innerWidth
+        const x = startX
+        if (x > screenW / 3 && x < screenW * 2 / 3) {
+          setShowControls(prev => !prev)
         }
       }
     } else {
@@ -285,7 +290,7 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
       }
     }
     setTimeout(() => { isSwipingRef.current = false }, 100)
-  }, [readingDirection, handleNextPage, handlePrevPage, isScrollMode, isSlideMode])
+  }, [readingDirection, handleNextPage, handlePrevPage, isScrollMode, isSlideMode, zoom])
 
   const handleScroll = useCallback(() => {
     const now = Date.now()
@@ -325,34 +330,14 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
 
     if (container.scrollTop <= 0 && e.deltaY < 0) {
       e.preventDefault()
-      if (boundaryTriggeredRef.current === 'prev') {
-        handlePrevChapter()
-        boundaryTriggeredRef.current = null
-      } else {
-        setBoundaryMsg('已到本章开头，再次上滑进入上一章')
-        boundaryTriggeredRef.current = 'prev'
-        if (boundaryTimerRef.current) clearTimeout(boundaryTimerRef.current)
-        boundaryTimerRef.current = setTimeout(() => {
-          boundaryTriggeredRef.current = null
-          setBoundaryMsg(null)
-        }, 5000)
-      }
+      handlePrevChapter()
+      boundaryTriggeredRef.current = null
     }
 
     if (container.scrollTop + container.clientHeight >= container.scrollHeight - 5 && e.deltaY > 0) {
       e.preventDefault()
-      if (boundaryTriggeredRef.current === 'next') {
-        handleNextChapter()
-        boundaryTriggeredRef.current = null
-      } else {
-        setBoundaryMsg('已到本章末尾，再次下滑进入下一章')
-        boundaryTriggeredRef.current = 'next'
-        if (boundaryTimerRef.current) clearTimeout(boundaryTimerRef.current)
-        boundaryTimerRef.current = setTimeout(() => {
-          boundaryTriggeredRef.current = null
-          setBoundaryMsg(null)
-        }, 5000)
-      }
+      handleNextChapter()
+      boundaryTriggeredRef.current = null
     }
   }, [isScrollMode, handlePrevChapter, handleNextChapter])
 
@@ -383,33 +368,13 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     const touchDiff = scrollTouchStartRef.current - touchEnd
 
     if (touchDiff < -50 && container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
-      if (boundaryTriggeredRef.current === 'next') {
-        handleNextChapter()
-        boundaryTriggeredRef.current = null
-      } else {
-        setBoundaryMsg('已到本章末尾，再次下滑进入下一章')
-        boundaryTriggeredRef.current = 'next'
-        if (boundaryTimerRef.current) clearTimeout(boundaryTimerRef.current)
-        boundaryTimerRef.current = setTimeout(() => {
-          boundaryTriggeredRef.current = null
-          setBoundaryMsg(null)
-        }, 5000)
-      }
+      handleNextChapter()
+      boundaryTriggeredRef.current = null
     }
 
     if (touchDiff > 50 && container.scrollTop <= 0) {
-      if (boundaryTriggeredRef.current === 'prev') {
-        handlePrevChapter()
-        boundaryTriggeredRef.current = null
-      } else {
-        setBoundaryMsg('已到本章开头，再次上滑进入上一章')
-        boundaryTriggeredRef.current = 'prev'
-        if (boundaryTimerRef.current) clearTimeout(boundaryTimerRef.current)
-        boundaryTimerRef.current = setTimeout(() => {
-          boundaryTriggeredRef.current = null
-          setBoundaryMsg(null)
-        }, 5000)
-      }
+      handlePrevChapter()
+      boundaryTriggeredRef.current = null
     }
   }, [isScrollMode, handleNextChapter, handlePrevChapter])
 
@@ -443,7 +408,20 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     }
   }, [saveProgress, editMode])
 
-  const getPageImageUrl = (pageNum: number) => `${chaptersApi.getPageImageUrl(chapterId, pageNum)}?t=${cacheBuster.current}`
+  const getPageImageUrl = (pageNum: number) => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+    const widthParam = isMobile ? '&w=900' : ''
+    return `${chaptersApi.getPageImageUrl(chapterId, pageNum)}?t=${cacheBuster.current}${widthParam}`
+  }
+
+  // 滚动模式：预加载当前页到章节末尾的全部剩余页面，滚动到底前图片已就绪
+  useEffect(() => {
+    if (!isScrollMode || editMode) return
+    for (let i = currentPage; i <= effectiveTotalPages; i++) {
+      const img = new Image()
+      img.src = getPageImageUrl(i)
+    }
+  }, [isScrollMode, editMode, currentPage, effectiveTotalPages])
 
   useEffect(() => {
     if (isScrollMode || editMode) return
@@ -452,17 +430,6 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     const end = Math.min(effectiveTotalPages, currentPage + preloadRange)
     for (let i = start; i <= end; i++) {
       if (i === currentPage) continue
-      const img = new Image()
-      img.src = getPageImageUrl(i)
-    }
-  }, [currentPage, effectiveTotalPages, isScrollMode, editMode])
-
-  useEffect(() => {
-    if (!isScrollMode || editMode) return
-    const preloadRange = 3
-    const start = Math.max(1, currentPage - preloadRange)
-    const end = Math.min(effectiveTotalPages, currentPage + preloadRange)
-    for (let i = start; i <= end; i++) {
       const img = new Image()
       img.src = getPageImageUrl(i)
     }
@@ -675,7 +642,23 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
         {displayPages.map((pageNum) => (
           <div key={pageNum} className="h-full flex items-center justify-center" style={{ maxWidth: readerMode === 'double' ? '50%' : '100%' }}>
             {!imageErrors.has(pageNum) ? (
-              <img src={getPageImageUrl(pageNum)} alt="" className="max-h-full max-w-full object-contain" style={{ transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined }} onError={() => setImageErrors((prev) => new Set(prev).add(pageNum))} draggable={false} />
+              zoom > 100 ? (
+                // 放大模式：可滚动平移查看细节（避免 transform 缩放被裁剪）
+                <div className="h-full w-full overflow-auto">
+                  <div className="flex min-h-full w-full items-center justify-center">
+                    <img
+                      src={getPageImageUrl(pageNum)}
+                      alt=""
+                      className="object-contain"
+                      style={{ width: `${zoom}%`, height: 'auto', maxWidth: 'none' }}
+                      onError={() => setImageErrors((prev) => new Set(prev).add(pageNum))}
+                      draggable={false}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <img src={getPageImageUrl(pageNum)} alt="" className="max-h-full max-w-full object-contain" onError={() => setImageErrors((prev) => new Set(prev).add(pageNum))} draggable={false} />
+              )
             ) : (
               <div className="flex h-64 w-48 items-center justify-center rounded text-sm" style={{ backgroundColor: '#1f2937', color: '#9ca3af' }}>加载失败</div>
             )}
@@ -699,7 +682,7 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
 
   return (
     <div className="fixed inset-0 z-50 bg-black select-none">
-      <div className="absolute top-0 left-0 right-0 h-10 flex items-center justify-between border-b px-4 z-10" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
+      <div className={clsx('absolute top-0 left-0 right-0 h-10 flex items-center justify-between border-b px-4 z-10 transition-transform duration-300', !showControls && '-translate-y-full')} style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
         <button onClick={handleExitWithCheck} className="rounded p-1 transition-colors hover:text-white" style={{ color: 'var(--text-secondary)' }}>
           <X className="h-5 w-5" />
         </button>
@@ -843,7 +826,7 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
         {renderContent()}
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 h-10 flex items-center justify-between border-t px-4 z-10" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
+      <div className={clsx('absolute bottom-0 left-0 right-0 h-10 flex items-center justify-between border-t px-4 z-10 transition-transform duration-300', !showControls && 'translate-y-full')} style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
         <button onClick={handlePrevPage} disabled={currentPage <= 1} className="rounded p-1 transition-colors hover:text-white disabled:opacity-30" style={{ color: 'var(--text-secondary)' }}>
           {readingDirection === 'rtl' ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
         </button>

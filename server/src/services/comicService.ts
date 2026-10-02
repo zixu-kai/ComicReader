@@ -93,8 +93,21 @@ export const comicService = {
     const total = countResult[0].count
     const totalPages = Math.ceil(total / pageSize)
 
+    // 批量关联评分与阅读进度，供卡片展示
+    const comicIds = rows.map(c => c.id)
+    let ratingMap = new Map<number, typeof ratings.$inferSelect>()
+    let progressMap = new Map<number, typeof readingProgress.$inferSelect>()
+    if (comicIds.length > 0) {
+      const [ratingRows, progressRows] = await Promise.all([
+        db.select().from(ratings).where(sql`${ratings.comicId} IN (${sql.join(comicIds.map(id => sql`${id}`), sql`,` )})`),
+        db.select().from(readingProgress).where(sql`${readingProgress.comicId} IN (${sql.join(comicIds.map(id => sql`${id}`), sql`,` )})`),
+      ])
+      ratingMap = new Map(ratingRows.map(r => [r.comicId, r]))
+      progressMap = new Map(progressRows.map(p => [p.comicId, p]))
+    }
+
     return {
-      data: rows as Comic[],
+      data: rows.map(c => ({ ...c, rating: ratingMap.get(c.id) || null, readingProgress: progressMap.get(c.id) || null })),
       total,
       page,
       pageSize,
@@ -118,6 +131,9 @@ export const comicService = {
       .innerJoin(tags, eq(comicTags.tagId, tags.id))
       .where(eq(comicTags.comicId, id))
 
+    // 忽略 Manga 标签（由 ComicInfo.xml 自动生成，不展示）
+    const visibleTags = comicTagsRows.filter(t => t.name.toLowerCase() !== 'manga')
+
     const [rating] = await db.select().from(ratings).where(eq(ratings.comicId, id))
 
     const [progress] = await db.select().from(readingProgress).where(eq(readingProgress.comicId, id))
@@ -125,7 +141,7 @@ export const comicService = {
     return {
       ...comic,
       categories: comicCategoriesRows,
-      tags: comicTagsRows,
+      tags: visibleTags,
       rating: rating || null,
       readingProgress: progress || null,
     } as Comic
@@ -186,23 +202,95 @@ export const comicService = {
     await db.delete(comics).where(eq(comics.id, id))
   },
 
-  async scanLibrary(namingMode?: string): Promise<ScanResult> {
-    return scanService.scanLibrary(namingMode)
+  async batchUpdate(
+    ids: number[],
+    data: { categoryIds?: number[]; tagIds?: number[]; status?: string; year?: number; language?: string; score?: number; readingStatus?: string }
+  ): Promise<number> {
+    if (ids.length === 0) return 0
+
+    const comicUpdate: Record<string, unknown> = {}
+    if (data.status !== undefined) comicUpdate.status = data.status
+    if (data.year !== undefined) comicUpdate.year = data.year
+    if (data.language !== undefined) comicUpdate.language = data.language
+    if (Object.keys(comicUpdate).length > 0) {
+      comicUpdate.updatedAt = new Date().toISOString()
+      await db.update(comics).set(comicUpdate).where(sql`${comics.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`,` )})`)
+    }
+
+    if (data.categoryIds) {
+      for (const id of ids) {
+        await db.delete(comicCategories).where(eq(comicCategories.comicId, id))
+        if (data.categoryIds.length > 0) {
+          await db.insert(comicCategories).values(data.categoryIds.map(categoryId => ({ comicId: id, categoryId })))
+        }
+      }
+    }
+
+    if (data.tagIds) {
+      for (const id of ids) {
+        await db.delete(comicTags).where(eq(comicTags.comicId, id))
+        if (data.tagIds.length > 0) {
+          await db.insert(comicTags).values(data.tagIds.map(tagId => ({ comicId: id, tagId })))
+        }
+      }
+    }
+
+    if (data.score !== undefined || data.readingStatus !== undefined) {
+      for (const id of ids) {
+        const [ratingRow] = await db.select().from(ratings).where(eq(ratings.comicId, id))
+        const score = data.score !== undefined ? data.score : (ratingRow?.score ?? 0)
+        const readingStatus = data.readingStatus !== undefined ? data.readingStatus : (ratingRow?.readingStatus ?? 'unread')
+        if (ratingRow) {
+          await db.update(ratings).set({
+            score,
+            readingStatus: readingStatus as 'unread' | 'reading' | 'read' | 'dropped',
+            updatedAt: new Date().toISOString(),
+          }).where(eq(ratings.id, ratingRow.id))
+        } else {
+          await db.insert(ratings).values({
+            comicId: id,
+            score,
+            readingStatus: readingStatus as 'unread' | 'reading' | 'read' | 'dropped',
+          })
+        }
+      }
+    }
+
+    return ids.length
+  },
+
+  async scanLibrary(namingMode?: string, scope: string = 'all'): Promise<ScanResult> {
+    return scanService.scanLibrary(namingMode, scope)
   },
 
   async getRandomComics(count: number, categoryId?: number): Promise<Comic[]> {
+    let result: Comic[]
     if (categoryId) {
-      const result = await db
+      const rows = await db
         .select()
         .from(comics)
         .innerJoin(comicCategories, eq(comics.id, comicCategories.comicId))
         .where(eq(comicCategories.categoryId, categoryId))
         .orderBy(sql`RANDOM()`)
         .limit(count)
-      return result.map(r => r.comics as Comic)
+      result = rows.map(r => r.comics as Comic)
+    } else {
+      result = await db.select().from(comics).orderBy(sql`RANDOM()`).limit(count) as Comic[]
     }
-    const result = await db.select().from(comics).orderBy(sql`RANDOM()`).limit(count)
-    return result as Comic[]
+
+    // 关联评分与阅读进度，供卡片展示
+    if (result.length > 0) {
+      const comicIds = result.map(c => c.id)
+      const [ratingRows, progressRows] = await Promise.all([
+        db.select().from(ratings).where(sql`${ratings.comicId} IN (${sql.join(comicIds.map(id => sql`${id}`), sql`,` )})`),
+        db.select().from(readingProgress).where(sql`${readingProgress.comicId} IN (${sql.join(comicIds.map(id => sql`${id}`), sql`,` )})`),
+      ])
+      const ratingMap = new Map(ratingRows.map(r => [r.comicId, r]))
+      const progressMap = new Map(progressRows.map(p => [p.comicId, p]))
+      return result.map(c => ({ ...c, rating: ratingMap.get(c.id) || null, readingProgress: progressMap.get(c.id) || null }))
+    }
+
+    return result
   },
 
   async searchComics(query: string): Promise<Comic[]> {

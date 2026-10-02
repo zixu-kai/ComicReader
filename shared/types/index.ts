@@ -52,7 +52,6 @@ export interface Category {
   hidden?: boolean
   children?: Category[]
   comicCount?: number
-  bookCount?: number
   createdAt: string
 }
 
@@ -91,7 +90,6 @@ export interface Bookmark {
   order: number
   comicCount?: number
   comics?: number[]
-  books?: number[]
   createdAt: string
 }
 
@@ -123,95 +121,6 @@ export interface ServerInfo {
   tagsCount: number
   totalSize: number
   uptime: number
-}
-
-export type BookFormat = 'epub' | 'pdf' | 'txt' | 'mobi' | 'azw3'
-
-export interface Book {
-  id: number
-  title: string
-  titleSort: string
-  author: string | null
-  description: string | null
-  format: BookFormat
-  publisher: string | null
-  publishDate: string | null
-  language: string | null
-  isbn: string | null
-  path: string
-  coverPath: string | null
-  fileSize: number
-  pageCount: number | null
-  lastReadAt: string | null
-  createdAt: string
-  updatedAt: string
-  tags?: Tag[]
-  categories?: Category[]
-  tagIds?: number[]
-  categoryIds?: number[]
-  rating?: BookRating | null
-  readingProgress?: BookReadingProgress | null
-}
-
-export interface BookRating {
-  id: number
-  bookId: number
-  score: number
-  readingStatus: ReadingStatus
-  notes: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface BookReadingProgress {
-  id: number
-  bookId: number
-  cfi: string | null
-  percentage: number
-  currentPage: number | null
-  totalPages: number | null
-  charOffset: number
-  isCompleted: boolean
-  lastReadAt: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface BookNote {
-  id: number
-  bookId: number
-  cfi: string
-  text: string
-  note: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface BookBookmark {
-  id: number
-  bookId: number
-  cfi: string
-  title: string | null
-  createdAt: string
-}
-
-export interface BookQueryParams {
-  page?: number
-  pageSize?: number
-  sort?: 'title' | 'createdAt' | 'updatedAt' | 'lastReadAt'
-  order?: 'asc' | 'desc'
-  tagId?: number
-  format?: BookFormat
-  readingStatus?: ReadingStatus
-  query?: string
-  author?: string
-}
-
-export interface BookScanResult {
-  added: number
-  updated: number
-  removed: number
-  errors: string[]
 }
 
 export interface ScanResult {

@@ -6,7 +6,7 @@ const { annotations } = schema
 
 export async function annotationRoutes(app: FastifyInstance) {
   app.get('/api/annotations/:targetType/:targetId', async (request) => {
-    const { targetType, targetId } = request.params as { targetType: 'comic' | 'book'; targetId: string }
+    const { targetType, targetId } = request.params as { targetType: 'comic'; targetId: string }
     return db.select().from(annotations).where(
       and(eq(annotations.targetType, targetType), eq(annotations.targetId, parseInt(targetId)))
     )

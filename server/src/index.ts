@@ -10,10 +10,9 @@ import { tagRoutes } from '@/routes/tags.js'
 import { ratingRoutes } from '@/routes/ratings.js'
 import { progressRoutes } from '@/routes/progress.js'
 import { systemRoutes } from '@/routes/system.js'
-import { bookRoutes } from '@/routes/books.js'
-import { bookRatingRoutes } from '@/routes/bookRatings.js'
 import { bookmarkRoutes } from '@/routes/bookmarks.js'
 import { annotationRoutes } from '@/routes/annotations.js'
+import { authRoutes } from '@/routes/auth.js'
 import config from '@/config/index.js'
 import { db, schema } from '@/db/index.js'
 import { runMigrations } from '@/db/migrate.js'
@@ -54,10 +53,9 @@ await app.register(tagRoutes)
 await app.register(ratingRoutes)
 await app.register(progressRoutes)
 await app.register(systemRoutes)
-await app.register(bookRoutes)
-await app.register(bookRatingRoutes)
 await app.register(bookmarkRoutes)
 await app.register(annotationRoutes)
+await app.register(authRoutes)
 
 if (!fs.existsSync(config.coversDir)) {
   fs.mkdirSync(config.coversDir, { recursive: true })
@@ -95,7 +93,6 @@ try {
   console.log('  OwnShelf server running')
   console.log(`  URL:    http://localhost:${config.port}`)
   console.log(`  Comics: ${config.comicsDir}`)
-  console.log(`  Books:  ${config.booksDir}`)
   console.log(`  DB:     ${config.dbPath}`)
   console.log('')
 } catch (err) {

@@ -52,6 +52,9 @@ export default function ComicDetailPage() {
   useEffect(() => {
     if (comicId) {
       fetchComic(comicId)
+      comicsApi.refresh(comicId).then(() => {
+        fetchComic(comicId)
+      }).catch(() => {})
       ratingsApi.get(comicId).then((r) => {
         setRating(r)
         if (r?.readingStatus) setReadingStatus(r.readingStatus)
@@ -84,7 +87,8 @@ export default function ComicDetailPage() {
     if (chapters.length === 0) return
     const firstChapter = chapters[0]
     if (readingProgress && !readingProgress.isCompleted) {
-      navigate(`/reader/${comicId}/${readingProgress.chapterId}`)
+      const page = readingProgress.currentPage > 1 ? `?page=${readingProgress.currentPage}` : ''
+      navigate(`/reader/${comicId}/${readingProgress.chapterId}${page}`)
     } else {
       navigate(`/reader/${comicId}/${firstChapter!.id}`)
     }
@@ -499,7 +503,7 @@ export default function ComicDetailPage() {
                       style={{ borderColor: 'var(--border-default)' }}
                     >
                       <img
-                        src={chaptersApi.getPageImageUrl(chapters[0]!.id, pageNum)}
+                        src={chaptersApi.getThumbUrl(chapters[0]!.id, pageNum)}
                         alt={`第${pageNum}页`}
                         className="h-full w-full object-cover"
                         loading="lazy"
@@ -514,9 +518,9 @@ export default function ComicDetailPage() {
       )}
 
       {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'var(--overlay)' }} onClick={() => setShowEditModal(false)}>
-          <div className="w-full max-w-lg rounded-xl border p-6 shadow-2xl" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-base)' }} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'var(--overlay)' }} onClick={() => setShowEditModal(false)}>
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl border shadow-2xl" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-base)' }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b px-5 py-3.5" style={{ borderColor: 'var(--border-default)' }}>
               <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>编辑信息</h2>
               <button
                 onClick={() => setShowEditModal(false)}
@@ -528,12 +532,12 @@ export default function ComicDetailPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="space-y-4">
+            <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>标题</label>
                 <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>作者</label>
                   <input value={editForm.author} onChange={(e) => setEditForm({ ...editForm, author: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
@@ -545,7 +549,7 @@ export default function ComicDetailPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>简介</label>
-                <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={4} className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary resize-none" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
+                <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary resize-none" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
               </div>
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>状态</label>
@@ -557,7 +561,7 @@ export default function ComicDetailPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>分类</label>
-                <div className="flex flex-wrap gap-2 rounded-lg border p-3 max-h-40 overflow-y-auto" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
+                <div className="flex flex-wrap gap-2 rounded-lg border p-2.5 max-h-28 overflow-y-auto" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
                   {categories.map((cat) => (
                     <label key={cat.id} className="flex items-center gap-1.5 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
                       <input
@@ -579,7 +583,7 @@ export default function ComicDetailPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>标签</label>
-                <div className="flex flex-wrap gap-2 rounded-lg border p-3 max-h-40 overflow-y-auto" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
+                <div className="flex flex-wrap gap-2 rounded-lg border p-2.5 max-h-28 overflow-y-auto" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
                   {tags.map((tag) => (
                     <label key={tag.id} className="flex items-center gap-1.5 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
                       <input
@@ -599,7 +603,10 @@ export default function ComicDetailPage() {
                   {tags.length === 0 && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>暂无标签</span>}
                 </div>
               </div>
-              <div className="flex justify-end gap-3 pt-2">
+            </div>
+            <div className="flex items-center justify-between border-t px-5 py-3" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-base)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>分类/标签列表可滚动</span>
+              <div className="flex gap-3">
                 <button
                   onClick={() => setShowEditModal(false)}
                   className="rounded-lg border px-4 py-2 text-sm"
@@ -614,7 +621,7 @@ export default function ComicDetailPage() {
                     setShowEditModal(false)
                     showToast('已保存修改')
                   } catch { showToast('保存失败') }
-                }} className="rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-hover">保存</button>
+                }} className="rounded-lg bg-primary px-5 py-2 text-sm text-white hover:bg-primary-hover">保存</button>
               </div>
             </div>
           </div>

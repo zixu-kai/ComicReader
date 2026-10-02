@@ -1,22 +1,49 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { BookOpen, Clock, Dice5, TrendingUp, Library } from 'lucide-react'
+import { BookOpen, Clock, Dice5, TrendingUp, Library, Play } from 'lucide-react'
 import { ComicCard } from '@/components/ComicCard'
-import { BookCard } from '@/components/BookCard'
 import { useComicStore } from '@/stores/comicStore'
-import { useBookStore } from '@/stores/bookStore'
-import { progressApi, systemApi, comicsApi, booksApi } from '@/services/api'
-import type { Comic, ReadingProgress, ServerInfo, Book } from '@/types'
+import { progressApi, systemApi, comicsApi, chaptersApi } from '@/services/api'
+import type { Comic, ReadingProgress, ServerInfo } from '@/types'
+
+interface LastReadInfo {
+  comicId: number
+  chapterId: number
+  page: number
+  comicTitle?: string
+  chapterTitle?: string
+  totalPages?: number
+}
 
 export default function HomePage() {
   const { fetchRandomComics } = useComicStore()
-  const { fetchRandomBooks } = useBookStore()
   const [continueReading, setContinueReading] = useState<(ReadingProgress & { comic?: Comic })[]>([])
-  const [continueReadingBooks, setContinueReadingBooks] = useState<Book[]>([])
   const [recentComics, setRecentComics] = useState<Comic[]>([])
   const [randomComics, setRandomComics] = useState<Comic[]>([])
-  const [randomBooks, setRandomBooks] = useState<Book[]>([])
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
+  const [lastRead, setLastRead] = useState<LastReadInfo | null>(null)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ownShelfLastRead')
+      if (raw) {
+        const data = JSON.parse(raw) as LastReadInfo
+        if (data.comicId && data.chapterId) {
+          comicsApi.get(data.comicId).then((comic) => {
+            chaptersApi.list(data.comicId).then((chs) => {
+              const ch = chs.find((c) => c.id === data.chapterId)
+              setLastRead({
+                ...data,
+                comicTitle: comic.title,
+                chapterTitle: ch?.title || (ch ? `第 ${ch.chapterNumber} 话` : undefined),
+                totalPages: ch?.pageCount,
+              })
+            }).catch(() => setLastRead({ ...data, comicTitle: comic.title }))
+          }).catch(() => {})
+        }
+      }
+    } catch {}
+  }, [])
 
   useEffect(() => {
     progressApi.getContinueReading(10).then(async (progressList) => {
@@ -38,12 +65,6 @@ export default function HomePage() {
       .catch(() => {})
 
     fetchRandomComics(6).then(setRandomComics).catch(() => {})
-
-    fetchRandomBooks(3).then(setRandomBooks).catch(() => {})
-
-    booksApi.list({ sort: 'lastReadAt', order: 'desc', pageSize: 10, readingStatus: 'reading' })
-      .then((res) => setContinueReadingBooks(res.data))
-      .catch(() => {})
 
     systemApi.getInfo().then(setServerInfo).catch(() => {})
   }, [])
@@ -89,6 +110,30 @@ export default function HomePage() {
         </div>
       )}
 
+      {lastRead && lastRead.comicTitle && (
+        <Link
+          to={`/reader/${lastRead.comicId}/${lastRead.chapterId}?page=${lastRead.page}`}
+          className="block rounded-xl border p-4 transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/10"
+          style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Play className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>继续上次阅读</p>
+              <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                {lastRead.comicTitle}
+                {lastRead.chapterTitle && <span className="ml-1 text-xs" style={{ color: 'var(--text-secondary)' }}>· {lastRead.chapterTitle}</span>}
+              </p>
+              {lastRead.totalPages && (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>第 {lastRead.page} / {lastRead.totalPages} 页</p>
+              )}
+            </div>
+          </div>
+        </Link>
+      )}
+
       {continueReading.length > 0 && (
         <section>
           <div className="mb-4 flex items-center justify-between">
@@ -103,25 +148,6 @@ export default function HomePage() {
                 <ComicCard key={item.comic.id} comic={item.comic} />
               ) : null
             )}
-          </div>
-        </section>
-      )}
-
-      {continueReadingBooks.length > 0 && (
-        <section>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-              <BookOpen className="h-5 w-5 text-primary" />
-              继续阅读 - 图书
-            </h2>
-            <Link to="/books?readingStatus=reading" className="text-sm text-primary hover:text-primary-hover">
-              查看全部
-            </Link>
-          </div>
-          <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {continueReadingBooks.map((book) => (
-              <BookCard key={book.id} book={book} />
-            ))}
           </div>
         </section>
       )}
@@ -159,25 +185,6 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {randomComics.map((comic) => (
               <ComicCard key={comic.id} comic={comic} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {randomBooks.length > 0 && (
-        <section>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-              <BookOpen className="h-5 w-5 text-accent-green" />
-              随机图书推荐
-            </h2>
-            <Link to="/books" className="text-sm text-primary hover:text-primary-hover">
-              查看全部
-            </Link>
-          </div>
-          <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {randomBooks.map((book) => (
-              <BookCard key={book.id} book={book} />
             ))}
           </div>
         </section>

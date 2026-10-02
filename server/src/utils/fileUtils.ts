@@ -34,8 +34,7 @@ export function naturalSort(a: string, b: string): number {
 
 const ALL_EXTENSIONS = new Set([
   '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif',
-  '.cbz', '.cbr', '.zip', '.rar',
-  '.epub', '.pdf', '.txt', '.mobi', '.azw3',
+  '.cbz', '.cbr', '.zip', '.rar', '.pdf',
 ])
 
 export function sanitizeTitle(filename: string): string {
@@ -62,15 +61,4 @@ export function cleanSeriesTitle(title: string): string {
   }
   cleaned = uniqueParts.join(' ')
   return cleaned || title
-}
-
-const BOOK_EXTENSIONS = new Set(['.epub', '.pdf', '.txt', '.mobi', '.azw3'])
-
-export function isBookFile(filename: string): boolean {
-  return BOOK_EXTENSIONS.has(path.extname(filename).toLowerCase())
-}
-
-export function getBookFormat(filename: string): 'epub' | 'pdf' | 'txt' | 'mobi' | 'azw3' {
-  const ext = path.extname(filename).toLowerCase().replace('.', '')
-  return (['epub', 'pdf', 'txt', 'mobi', 'azw3'].includes(ext) ? ext : 'pdf') as 'epub' | 'pdf' | 'txt' | 'mobi' | 'azw3'
 }

@@ -7,11 +7,13 @@ import {
   X,
   Eye,
   EyeOff,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react'
 import type { Category } from '@/types'
 
 export default function CategoriesPage() {
-  const { categories, tags, fetchCategories, fetchTags, createCategory, updateCategory, deleteCategory, toggleCategoryHidden, createTag, deleteTag } = useCategoryStore()
+  const { categories, tags, fetchCategories, fetchTags, createCategory, updateCategory, deleteCategory, toggleCategoryHidden, createTag, moveTag, batchDeleteTags, deleteTag } = useCategoryStore()
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryDesc, setNewCategoryDesc] = useState('')
@@ -19,6 +21,7 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([])
 
   useEffect(() => {
     fetchCategories(true)
@@ -48,7 +51,28 @@ export default function CategoriesPage() {
   const handleDeleteTag = async (id: number) => {
     if (confirm('确定要删除此标签吗？')) {
       await deleteTag(id)
+      setSelectedTagIds((prev) => prev.filter((x) => x !== id))
     }
+  }
+
+  const handleMoveTag = async (id: number, direction: 'up' | 'down') => {
+    await moveTag(id, direction)
+  }
+
+  const handleBatchDeleteTags = async () => {
+    if (selectedTagIds.length === 0) return
+    if (confirm(`确定删除选中的 ${selectedTagIds.length} 个标签吗？`)) {
+      await batchDeleteTags(selectedTagIds)
+      setSelectedTagIds([])
+    }
+  }
+
+  const toggleSelectTag = (id: number) => {
+    setSelectedTagIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  const toggleSelectAllTags = () => {
+    setSelectedTagIds((prev) => (prev.length === tags.length ? [] : tags.map((t) => t.id)))
   }
 
   const handleAddTag = async () => {
@@ -187,9 +211,6 @@ export default function CategoriesPage() {
                     {cat.comicCount !== undefined && cat.comicCount > 0 && (
                       <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>{cat.comicCount} 部漫画</span>
                     )}
-                    {cat.bookCount !== undefined && cat.bookCount > 0 && (
-                      <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>{cat.bookCount} 本小说</span>
-                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -229,7 +250,32 @@ export default function CategoriesPage() {
       </div>
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>标签管理</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>标签管理</h2>
+          <div className="flex items-center gap-2">
+            {selectedTagIds.length > 0 && (
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>已选 {selectedTagIds.length} 个</span>
+            )}
+            <button
+              onClick={toggleSelectAllTags}
+              className="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+              style={{ borderColor: 'var(--border-light)', color: 'var(--text-secondary)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
+            >
+              {selectedTagIds.length === tags.length && tags.length > 0 ? '取消全选' : '全选'}
+            </button>
+            <button
+              onClick={handleBatchDeleteTags}
+              disabled={selectedTagIds.length === 0}
+              className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs transition-colors disabled:opacity-40"
+              style={{ borderColor: 'rgba(239, 68, 68, 0.35)', color: 'var(--accent-red)' }}
+            >
+              <Trash2 className="h-3 w-3" />
+              删除选中
+            </button>
+          </div>
+        </div>
         <div className="mb-4 flex gap-2">
           <input
             type="text"
@@ -247,33 +293,72 @@ export default function CategoriesPage() {
             添加
           </button>
         </div>
-        <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
+        <div className="rounded-lg border" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
           {tags.length === 0 ? (
             <div className="py-4 text-center text-sm" style={{ color: 'var(--text-muted)' }}>暂无标签</div>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <span
-                  key={tag.id}
-                  className="group inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
-                  style={{
-                    borderColor: 'var(--border-light)',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  {tag.name}
-                  {tag.comicCount !== undefined && (
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{tag.comicCount}</span>
-                  )}
-                  <button
-                    onClick={() => handleDeleteTag(tag.id)}
-                    className="hidden group-hover:inline transition-colors hover:text-accent-red"
-                    style={{ color: 'var(--text-muted)' }}
+            <div className="divide-y" style={{ borderColor: 'var(--border-default)' }}>
+              {tags.map((tag, index) => {
+                const isSelected = selectedTagIds.includes(tag.id)
+                const isFirst = index === 0
+                const isLast = index === tags.length - 1
+                return (
+                  <div
+                    key={tag.id}
+                    className="flex items-center gap-3 px-4 py-2.5 transition-colors"
+                    style={{ backgroundColor: isSelected ? 'rgba(var(--primary-rgb), 0.08)' : 'transparent' }}
+                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)' }}
+                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent' }}
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelectTag(tag.id)}
+                      className="accent-primary shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{tag.name}</span>
+                      {tag.comicCount !== undefined && tag.comicCount > 0 && (
+                        <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>{tag.comicCount} 部</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleMoveTag(tag.id, 'up')}
+                        disabled={isFirst}
+                        className="rounded p-1.5 transition-colors disabled:opacity-25"
+                        style={{ color: 'var(--text-muted)' }}
+                        title="上移"
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-active)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleMoveTag(tag.id, 'down')}
+                        disabled={isLast}
+                        className="rounded p-1.5 transition-colors disabled:opacity-25"
+                        style={{ color: 'var(--text-muted)' }}
+                        title="下移"
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-active)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                      >
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTag(tag.id)}
+                        className="rounded p-1.5 transition-colors hover:text-accent-red"
+                        style={{ color: 'var(--text-muted)' }}
+                        title="删除"
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-active)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

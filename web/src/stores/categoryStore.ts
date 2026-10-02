@@ -15,6 +15,8 @@ interface CategoryState {
   toggleCategoryHidden: (id: number) => Promise<void>
   fetchTags: () => Promise<void>
   createTag: (name: string) => Promise<void>
+  moveTag: (id: number, direction: 'up' | 'down') => Promise<void>
+  batchDeleteTags: (ids: number[]) => Promise<void>
   deleteTag: (id: number) => Promise<void>
   clearError: () => void
 }
@@ -86,6 +88,24 @@ export const useCategoryStore = create<CategoryState>((set, get) => ({
   createTag: async (name) => {
     try {
       await tagsApi.create(name)
+      await get().fetchTags()
+    } catch (e) {
+      set({ error: (e as Error).message })
+    }
+  },
+
+  moveTag: async (id, direction) => {
+    try {
+      await tagsApi.move(id, direction)
+      await get().fetchTags()
+    } catch (e) {
+      set({ error: (e as Error).message })
+    }
+  },
+
+  batchDeleteTags: async (ids) => {
+    try {
+      await tagsApi.batchDelete(ids)
       await get().fetchTags()
     } catch (e) {
       set({ error: (e as Error).message })

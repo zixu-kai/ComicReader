@@ -97,10 +97,10 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   setShowControls: (show) => set({ showControls: show }),
 
   saveProgress: async () => {
-    const { comicId, chapterId, currentPage } = get()
+    const { comicId, chapterId, currentPage, totalPages } = get()
     if (comicId && chapterId) {
       try {
-        await progressApi.update(comicId, chapterId, currentPage)
+        await progressApi.update(comicId, chapterId, currentPage, totalPages)
       } catch {
         // silent fail for progress saving
       }

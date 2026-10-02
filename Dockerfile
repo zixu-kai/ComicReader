@@ -30,13 +30,12 @@ COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/drizzle ./server/drizzle
 COPY --from=web-builder /app/server/static ./server/static
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && mkdir -p /comics /books /app/data
+RUN chmod +x /entrypoint.sh && mkdir -p /comics /app/data
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=7788
 ENV COMICS_DIR=/comics
-ENV BOOKS_DIR=/books
 ENV DB_PATH=/app/data/ownshelf.db
 ENV COVERS_DIR=/app/data/covers
 ENV JWT_SECRET=change-me-in-production
@@ -44,6 +43,6 @@ ENV PUID=
 ENV PGID=
 
 EXPOSE 7788
-VOLUME ["/comics", "/books", "/app/data"]
+VOLUME ["/comics", "/app/data"]
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "server/dist/index.js"]

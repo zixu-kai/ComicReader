@@ -8,10 +8,16 @@ data/
 covers/
 release/
 参考/
-scripts/
 *.tar
+*.tsbuildinfo
 .DS_Store
 Thumbs.db
+
+# 打包发布脚本需要提交给 GitHub Actions，其余 scripts 文件忽略
+scripts/*
+!scripts/package-release.sh
+!scripts/package-release.ps1
+!scripts/nas-docker-compose.yaml
 
 # HarmonyOS/Hvigor 构建输出
 clients/harmony-native/.hvigor/

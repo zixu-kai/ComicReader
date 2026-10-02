@@ -30,29 +30,25 @@ pnpm --filter server build
 if %errorlevel% neq 0 (echo [ERROR] Server build failed & pause & exit /b 1)
 pnpm --filter web build
 if %errorlevel% neq 0 (echo [ERROR] Web build failed & pause & exit /b 1)
-if not exist "%ROOT%server\static" mkdir "%ROOT%server\static"
-xcopy /e /i /q /y "%ROOT%web\dist\*" "%ROOT%server\static\"
-if %errorlevel% neq 0 (echo [ERROR] Static copy failed & pause & exit /b 1)
-pnpm --filter server db:push
 echo [INFO] Build complete!
 
 :START
-netstat -ano | findstr ":8080 " | findstr "LISTENING" >nul 2>&1
+netstat -ano | findstr ":7788 " | findstr "LISTENING" >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [WARN] Port 8080 is in use, releasing...
-    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080 " ^| findstr "LISTENING"') do (
+    echo [WARN] Port 7788 is in use, releasing...
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":7788 " ^| findstr "LISTENING"') do (
         taskkill /f /pid %%a >nul 2>&1
     )
     timeout /t 2 /nobreak >nul
 )
 
 echo [INFO] Starting server...
-echo [INFO] URL: http://localhost:8080
+echo [INFO] URL: http://localhost:7788
 echo [INFO] Press Ctrl+C to stop
 echo.
 
 cd /d "%ROOT%server"
-start http://localhost:8080
+start http://localhost:7788
 node dist/index.js
 
 endlocal

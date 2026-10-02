@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import multipart from '@fastify/multipart'
 import { chapterService } from '@/services/chapterService.js'
-import path from 'path'
+import sharp from 'sharp'
 
 export async function chapterRoutes(app: FastifyInstance) {
   await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } })
@@ -30,12 +30,29 @@ export async function chapterRoutes(app: FastifyInstance) {
       return
     }
 
-    const ext = path.extname(request.url).toLowerCase()
+    // ?w= 宽度参数：按需降采样为 WebP，用于缩略图/移动端，降低带宽
+    const { w } = request.query as { w?: string }
+    const maxWidth = w ? parseInt(w, 10) : 0
+    let outBuffer: Buffer = imageBuffer
     let contentType = 'image/jpeg'
 
+    if (maxWidth > 0 && maxWidth < 4096) {
+      try {
+        outBuffer = await sharp(imageBuffer)
+          .resize({ width: maxWidth, withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toBuffer()
+        contentType = 'image/webp'
+      } catch {
+        outBuffer = imageBuffer
+        contentType = 'image/jpeg'
+      }
+    }
+
     reply.header('Content-Type', contentType)
-    reply.header('Cache-Control', 'no-cache')
-    reply.send(imageBuffer)
+    // 页面图片很少变动，长缓存 + 前端 cache-buster 保证编辑后可见
+    reply.header('Cache-Control', 'public, max-age=86400')
+    reply.send(outBuffer)
   })
 
   app.post('/api/chapters/:id/backup', async (request, reply) => {

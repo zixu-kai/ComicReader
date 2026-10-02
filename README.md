@@ -1,18 +1,18 @@
-# OwnShelf（私阁）—— 个人漫画和小说阅读器
+# OwnShelf（私阁）—— 个人漫画阅读器
 
-**OwnShelf（私阁）** 是一款开源的本地漫画与电子书阅读器，让你在浏览器中轻松管理和阅读你的私人收藏。
+**OwnShelf（私阁）** 是一款开源的本地漫画阅读器，让你在浏览器中轻松管理和阅读你的私人漫画收藏。
 
 ---
 
 ## ✨ 特性
 
-- 📚 **漫画阅读** — 支持 CBZ、ZIP 和图片文件夹格式的漫画，提供流畅的翻页阅读体验
-- 📖 **电子书阅读** — 支持 EPUB、PDF、TXT 三种格式，内置专业阅读器
-- 🏷️ **分类与标签** — 自由创建分类目录，为作品添加标签，轻松管理成千上万本藏书
-- ⭐ **评分与书签** — 给喜欢的作品打分，添加书签收藏精彩片段
+- 📚 **漫画阅读** — 支持 CBZ、CBR、ZIP、RAR 和图片文件夹格式的漫画，提供流畅的翻页阅读体验
+- 🏷️ **分类与标签** — 自由创建分类目录，为作品添加标签，轻松管理成千上万本漫画
+- ⭐ **评分与书签** — 给喜欢的作品打分，收藏精彩作品
 - 📌 **阅读进度** — 自动记录阅读进度，下次打开无缝续读
 - 🎲 **随机推荐** — 选择困难？让随机功能帮你决定今天看什么
 - 🔍 **全文搜索** — 快速搜索书名、作者、标签，找到想看的内容
+- ✂️ **章节编辑** — 在阅读器中直接删除/插入页面，修改实时写回源文件
 - 🌐 **响应式设计** — 适配桌面端和移动端浏览器，随时随地阅读
 - 🐳 **Docker 部署** — 一条命令即可在 NAS 或服务器上运行
 - 🪶 **轻量级** — 基于 SQLite 数据库，无需额外安装数据库服务
@@ -93,8 +93,6 @@ OwnShelf/
 │   │   └── styles/          # 全局样式（TailwindCSS）
 │   └── vite.config.ts       # Vite 配置
 ├── shared/                  # 前后端共享类型定义
-├── docker/                  # Docker 部署配置
-├── release/                 # 发布打包文件
 ├── clients/                 # 客户端应用（桌面端、移动端、鸿蒙）
 ├── package.json             # 根 monorepo 配置
 ├── pnpm-workspace.yaml      # pnpm 工作空间配置
@@ -112,7 +110,6 @@ OwnShelf/
 | `PORT` | 后端服务监听端口 | `7788` |
 | `HOST` | 绑定地址 | `0.0.0.0` |
 | `COMICS_DIR` | 漫画文件存放目录 | `./comics` |
-| `BOOKS_DIR` | 电子书文件存放目录 | `./books` |
 | `DB_PATH` | SQLite 数据库文件路径 | `./data/ownshelf.db` |
 | `COVERS_DIR` | 封面缓存目录 | `./data/covers` |
 | `JWT_SECRET` | JWT 签名密钥（**生产环境务必修改**） | `change-me-in-production` |
@@ -135,10 +132,7 @@ OwnShelf/
 | [TailwindCSS 4](https://tailwindcss.com/) | CSS 框架 |
 | [Zustand](https://zustand-demo.pmnd.rs/) | 状态管理 |
 | [React Router 7](https://reactrouter.com/) | 路由 |
-| [Radix UI](https://www.radix-ui.com/) | 无样式 UI 组件 |
 | [Lucide React](https://lucide.dev/) | 图标库 |
-| [EPUB.js](https://github.com/futurepress/epub.js/) | EPUB 阅读器 |
-| [PDF.js](https://mozilla.github.io/pdf.js/) | PDF 阅读器 |
 
 ### 后端
 
@@ -150,7 +144,6 @@ OwnShelf/
 | [libSQL / SQLite](https://turso.tech/libsql) | 嵌入式数据库 |
 | [Sharp](https://sharp.pixelplumbing.com/) | 图片处理（封面生成） |
 | [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | JWT 认证 |
-| [archiver](https://github.com/archiverjs/node-archiver) | 文件打包（下载） |
 | [tsup](https://tsup.egoist.dev/) | TypeScript 构建打包 |
 
 ### 工程化
@@ -172,7 +165,6 @@ pnpm dev:web          # 仅启动前端开发服务
 pnpm build            # 构建所有子包（生产模式）
 pnpm build:server     # 仅构建后端
 pnpm build:web        # 构建前端（普通模式）
-pnpm build:web:github # 构建前端（GitHub Pages 模式）
 
 # ─────── 后端命令 ───────
 cd server
@@ -195,14 +187,21 @@ pnpm preview          # 预览生产构建结果
 
 ## 🐳 Docker 部署
 
-### 方式一：本地文件部署（推荐 NAS 用户）
+### 方式一：GitHub Releases 下载部署（推荐 NAS 用户）
 
 适用于绿联、群晖、威联通等 NAS，或任何支持 Docker Compose 的环境。
 
-1. 从 [Releases](https://github.com/zixu-kai/ComicReader/releases) 下载最新版压缩包
-2. 解压后上传到 NAS（如绿联上传到 `/volume1/docker/ownshelf/`）
-3. 修改 `docker-compose.yaml` 中的卷映射路径和 `JWT_SECRET`
-4. 在 Docker 管理器中选择 `docker-compose.yaml` 部署
+1. 打开 [Releases](https://github.com/zixu-kai/ComicReader/releases)，下载最新的 `OwnShelf-vX.Y.Z.zip`
+2. 解压后，将整个 `OwnShelf-vX.Y.Z` 文件夹上传到 NAS（如绿联上传到 `/volume1/docker/ownshelf/`）
+3. 修改文件夹内 `docker-compose.yaml`：
+   - `/volume1/comics` → 你的漫画目录实际路径
+   - `JWT_SECRET` → 改为随机字符串
+   - （可选）取消注释 `AUTH_ENABLED` / `AUTH_PASSWORD` 开启访问密码
+4. 在绿联 Docker 管理器中，先**停止并删除旧的 ownshelf 容器和镜像**，再用「项目」功能选择该文件夹
+5. 绿联会识别 `docker-compose.yaml` 并自动构建镜像、启动容器
+6. 访问 `http://NAS的IP:7788`，点击扫描按钮开始扫描
+
+> **重要**：每次更新后必须先删除旧镜像再重新部署，否则绿联会使用缓存的旧镜像。
 
 ### 方式二：GitHub 镜像部署
 
@@ -216,11 +215,11 @@ docker pull ghcr.io/zixu-kai/comicreader:latest
 
 绿联使用可视化 Docker 管理，**必须使用 `docker-compose.yaml` 文件**（`.yaml` 后缀）：
 
-1. 将 `nas-nodonate` 文件夹完整上传到 NAS
+1. 将部署文件夹完整上传到 NAS
 2. 打开绿联 Docker 管理器 → 停止并删除已有的 ownshelf 容器和镜像
 3. 使用「项目」或「docker-compose」功能，选择上传的文件夹
 4. 绿联会识别 `docker-compose.yaml` 并自动构建镜像、启动容器
-5. 在绿联 Docker 管理器中修改卷映射路径为你实际的漫画/小说目录
+5. 在绿联 Docker 管理器中修改卷映射路径为你实际的漫画目录
 6. 访问 `http://NAS的IP:7788` 打开页面，点击扫描按钮开始扫描
 
 > **重要**：每次更新代码后，必须先删除旧镜像再重新部署，否则绿联会使用缓存的旧镜像。
@@ -237,10 +236,8 @@ services:
     volumes:
       - ./data:/app/data          # 数据库和封面缓存（勿改）
       - /volume1/comics:/comics   # 改为你的漫画目录路径
-      - /volume1/books:/books     # 改为你的小说目录路径
     environment:
       - COMICS_DIR=/comics
-      - BOOKS_DIR=/books
       - DB_PATH=/app/data/ownshelf.db
       - COVERS_DIR=/app/data/covers
       - HOST=0.0.0.0
@@ -257,15 +254,13 @@ services:
 |--------|------|
 | `JWT_SECRET` | **务必修改**为随机字符串 |
 | `/volume1/comics` | 改为你的漫画存放路径（绿联 NAS 通常为 `/volume1/共享文件夹名`） |
-| `/volume1/books` | 改为你的图书存放路径 |
-| `PUID` / `PGID` | 留空以 root 运行；填入 UID:GID 可降权运行（需确保该用户有权限读取漫画/小说目录） |
+| `PUID` / `PGID` | 留空以 root 运行；填入 UID:GID 可降权运行（需确保该用户有权限读取漫画目录） |
 
 ### 支持的文件格式
 
 | 类型 | 支持格式 |
 |------|---------|
-| 漫画 | CBZ、ZIP、图片文件夹（JPG/PNG/WebP/GIF 等） |
-| 小说 | EPUB、PDF、TXT |
+| 漫画 | CBZ、CBR、ZIP、RAR、图片文件夹（JPG/PNG/WebP/GIF 等） |
 
 ### 更新部署
 

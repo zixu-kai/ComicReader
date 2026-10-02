@@ -56,6 +56,7 @@ export const categories = sqliteTable('categories', {
 export const tags = sqliteTable('tags', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
+  order: integer('order').notNull().default(0),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 })
 
@@ -118,123 +119,9 @@ export const bookmarkComics = sqliteTable('bookmark_comics', {
   uniqueIndex('idx_bookmark_comics_unique').on(table.bookmarkId, table.comicId),
 ])
 
-export const bookmarkBooks = sqliteTable('bookmark_books', {
-  bookmarkId: integer('bookmark_id').notNull().references(() => bookmarks.id, { onDelete: 'cascade' }),
-  bookId: integer('book_id').notNull().references(() => books.id, { onDelete: 'cascade' }),
-}, (table) => [
-  index('idx_bookmark_books_bookmark').on(table.bookmarkId),
-  uniqueIndex('idx_bookmark_books_unique').on(table.bookmarkId, table.bookId),
-])
-
-export const books = sqliteTable('books', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  title: text('title').notNull(),
-  titleSort: text('title_sort').notNull(),
-  author: text('author'),
-  description: text('description'),
-  publisher: text('publisher'),
-  publishDate: text('publish_date'),
-  isbn: text('isbn'),
-  language: text('language'),
-  pageCount: integer('page_count').notNull().default(0),
-  format: text('format', { enum: ['epub', 'pdf', 'txt', 'mobi', 'azw3'] }).notNull(),
-  path: text('path').notNull().unique(),
-  coverPath: text('cover_path'),
-  fileSize: integer('file_size').notNull().default(0),
-  lastReadAt: text('last_read_at'),
-  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
-  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
-}, (table) => [
-  index('idx_books_title').on(table.titleSort),
-  index('idx_books_author').on(table.author),
-  index('idx_books_format').on(table.format),
-  index('idx_books_created').on(table.createdAt),
-])
-
-export const bookTags = sqliteTable('book_tags', {
-  bookId: integer('book_id').notNull().references(() => books.id, { onDelete: 'cascade' }),
-  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
-}, (table) => [
-  index('idx_book_tags_book').on(table.bookId),
-  index('idx_book_tags_tag').on(table.tagId),
-])
-
-export const bookCategories = sqliteTable('book_categories', {
-  bookId: integer('book_id').notNull().references(() => books.id, { onDelete: 'cascade' }),
-  categoryId: integer('category_id').notNull().references(() => categories.id, { onDelete: 'cascade' }),
-}, (table) => [
-  index('idx_book_categories_book').on(table.bookId),
-  index('idx_book_categories_category').on(table.categoryId),
-])
-
-export const bookRatings = sqliteTable('book_ratings', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  bookId: integer('book_id').notNull().references(() => books.id, { onDelete: 'cascade' }).unique(),
-  score: integer('score').notNull().default(0),
-  readingStatus: text('reading_status', { enum: ['unread', 'reading', 'read', 'dropped'] }).notNull().default('unread'),
-  notes: text('notes'),
-  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
-  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
-}, (table) => [
-  index('idx_book_ratings_book').on(table.bookId),
-  index('idx_book_ratings_status').on(table.readingStatus),
-])
-
-export const bookReadingProgress = sqliteTable('book_reading_progress', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  bookId: integer('book_id').notNull().references(() => books.id, { onDelete: 'cascade' }),
-  cfi: text('cfi'),
-  percentage: real('percentage').notNull().default(0),
-  currentPage: integer('current_page').notNull().default(0),
-  totalPages: integer('total_pages').notNull().default(0),
-  charOffset: integer('char_offset').notNull().default(0),
-  isCompleted: integer('is_completed', { mode: 'boolean' }).notNull().default(false),
-  lastReadAt: text('last_read_at').notNull().$defaultFn(() => new Date().toISOString()),
-  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
-  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
-}, (table) => [
-  index('idx_book_progress_book').on(table.bookId),
-  index('idx_book_progress_last_read').on(table.lastReadAt),
-])
-
-export const bookNotes = sqliteTable('book_notes', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  bookId: integer('book_id').notNull().references(() => books.id, { onDelete: 'cascade' }),
-  cfi: text('cfi').notNull(),
-  text: text('text').notNull(),
-  note: text('note'),
-  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
-  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
-}, (table) => [
-  index('idx_book_notes_book').on(table.bookId),
-])
-
-export const bookBookmarks = sqliteTable('book_bookmarks', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  bookId: integer('book_id').notNull().references(() => books.id, { onDelete: 'cascade' }),
-  cfi: text('cfi').notNull(),
-  title: text('title'),
-  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
-}, (table) => [
-  index('idx_book_bookmarks_book').on(table.bookId),
-])
-
-export const bookChapters = sqliteTable('book_chapters', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  bookId: integer('book_id').notNull().references(() => books.id, { onDelete: 'cascade' }),
-  title: text('title').notNull(),
-  startPos: integer('start_pos').notNull(),
-  endPos: integer('end_pos').notNull(),
-  sortOrder: integer('sort_order').notNull().default(0),
-  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
-  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
-}, (table) => [
-  index('idx_book_chapters_book').on(table.bookId),
-])
-
 export const annotations = sqliteTable('annotations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  targetType: text('target_type', { enum: ['comic', 'book'] }).notNull(),
+  targetType: text('target_type', { enum: ['comic'] }).notNull(),
   targetId: integer('target_id').notNull(),
   page: integer('page'),
   position: text('position'),

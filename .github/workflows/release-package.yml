@@ -1,0 +1,50 @@
+name: Build Release Package
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Determine version
+      id: version
+      run: |
+        if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "version=manual-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "tag=manual-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Package release
+      run: |
+        bash scripts/package-release.sh "${{ steps.version.outputs.version }}"
+        ls -la release/
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.version.outputs.tag }}
+        name: OwnShelf ${{ steps.version.outputs.version }}
+        body: |
+          基于 GitHub 自动构建的部署包。
+
+          ## 使用方法（绿联 NAS）
+          1. 下载 `OwnShelf-*.zip` 并解压，上传整个文件夹到 NAS（如 `/volume1/docker/ownshelf/`）
+          2. 打开绿联 Docker 管理器 → 停止并删除旧的 ownshelf 容器和镜像
+          3. 使用「项目」功能选择该文件夹，识别 `docker-compose.yaml` 后构建并启动
+          4. 修改 `docker-compose.yaml` 中的 `/volume1/comics` 为你的漫画目录，`JWT_SECRET` 改为随机字符串
+          5. 访问 `http://NAS的IP:7788`
+        draft: ${{ github.ref_type != 'tag' }}
+        files: |
+          release/OwnShelf-${{ steps.version.outputs.version }}.zip
+          release/OwnShelf-${{ steps.version.outputs.version }}.tar.gz

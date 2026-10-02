@@ -3,7 +3,6 @@ import { Link, useLocation, Outlet } from 'react-router'
 import {
   Home,
   Library,
-  BookOpen,
   FolderTree,
   Bookmark,
   Dice5,
@@ -17,17 +16,15 @@ import {
   Moon,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/appStore'
-import { useComicStore } from '@/stores/comicStore'
-import { useBookStore } from '@/stores/bookStore'
-import { comicsApi, booksApi } from '@/services/api'
-import type { Comic, Book } from '@/types'
+import { comicsApi } from '@/services/api'
+import type { Comic } from '@/types'
 import clsx from 'clsx'
 import DonateButton from '@/components/DonateButton'
+import ScanDialog from '@/components/ScanDialog'
 
 const navItems = [
   { path: '/', label: '首页', icon: Home },
   { path: '/library', label: '漫画库', icon: Library },
-  { path: '/books', label: '图书库', icon: BookOpen },
   { path: '/categories', label: '分类与标签', icon: FolderTree },
   { path: '/bookmarks', label: '收藏', icon: Bookmark },
   { path: '/random', label: '随机发现', icon: Dice5 },
@@ -36,16 +33,13 @@ const navItems = [
 export default function Layout() {
   const location = useLocation()
   const { sidebarOpen, sidebarCollapsed, toggleSidebar, toggleSidebarCollapsed, settingsOpen, setSettingsOpen, theme, setTheme } = useAppStore()
-  const { scanLibrary, loading } = useComicStore()
-  const { scanBooks } = useBookStore()
-  const [scanResult, setScanResult] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchComics, setSearchComics] = useState<Comic[]>([])
-  const [searchBooks, setSearchBooks] = useState<Book[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const [namingMode, setNamingMode] = useState(() => localStorage.getItem('namingMode') || 'folder')
+  const [scanOpen, setScanOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -62,43 +56,19 @@ export default function Layout() {
     }
   }, [isMobile])
 
-  const handleScan = useCallback(async () => {
-    try {
-      const [comicRes, bookRes] = await Promise.all([
-        comicsApi.scan(namingMode),
-        booksApi.scan(namingMode),
-      ])
-      const parts: string[] = []
-      if (comicRes.added > 0 || comicRes.updated > 0 || comicRes.removed > 0) {
-        parts.push(`漫画: +${comicRes.added} 更新${comicRes.updated} 删除${comicRes.removed}`)
-      }
-      if (bookRes.added > 0 || bookRes.updated > 0 || bookRes.removed > 0) {
-        parts.push(`图书: +${bookRes.added} 更新${bookRes.updated} 删除${bookRes.removed}`)
-      }
-      setScanResult(parts.length > 0 ? parts.join(' | ') : '没有新增内容')
-      scanLibrary()
-      scanBooks()
-      setTimeout(() => setScanResult(null), 5000)
-    } catch {
-      setScanResult('扫描失败')
-      setTimeout(() => setScanResult(null), 3000)
-    }
-  }, [scanLibrary, scanBooks, namingMode])
-
   const handleSearch = useCallback((query: string) => {
     if (!query.trim()) {
       setSearchComics([])
-      setSearchBooks([])
       setShowDropdown(false)
       return
     }
     setSearchLoading(true)
-    Promise.all([
-      comicsApi.search(query, { pageSize: 5 }).catch(() => ({ data: [], total: 0, page: 1, pageSize: 5, totalPages: 0 })),
-      booksApi.search(query).catch(() => []),
-    ]).then(([comicsRes, booksRes]) => {
-      setSearchComics(comicsRes.data)
-      setSearchBooks(Array.isArray(booksRes) ? booksRes : [])
+    comicsApi.search(query, { pageSize: 5 }).then((res) => {
+      setSearchComics(Array.isArray(res) ? res : res.data || [])
+      setSearchLoading(false)
+      setShowDropdown(true)
+    }).catch(() => {
+      setSearchComics([])
       setSearchLoading(false)
       setShowDropdown(true)
     })
@@ -111,7 +81,6 @@ export default function Layout() {
     }
     if (!value.trim()) {
       setSearchComics([])
-      setSearchBooks([])
       setShowDropdown(false)
       return
     }
@@ -134,10 +103,9 @@ export default function Layout() {
     setShowDropdown(false)
     setSearchQuery('')
     setSearchComics([])
-    setSearchBooks([])
   }, [location.pathname])
 
-  const isReaderPage = location.pathname.startsWith('/reader') || location.pathname.startsWith('/book-reader')
+  const isReaderPage = location.pathname.startsWith('/reader')
 
   if (isReaderPage) {
     return <Outlet />
@@ -194,9 +162,8 @@ export default function Layout() {
           <div className="p-2" style={{ borderTop: '1px solid var(--border-default)' }}>
             <DonateButton />
             <button
-              onClick={() => handleScan()}
-              disabled={loading}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium disabled:opacity-50"
+              onClick={() => setScanOpen(true)}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium"
               style={{ color: 'var(--text-secondary)' }}
             >
               <ScanLine className="h-5 w-5 shrink-0" />
@@ -258,15 +225,15 @@ export default function Layout() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => handleSearchInput(e.target.value)}
-                onFocus={() => { if (searchQuery.trim() && (searchComics.length > 0 || searchBooks.length > 0)) setShowDropdown(true) }}
-                placeholder="搜索漫画和图书..."
+                onFocus={() => { if (searchQuery.trim() && searchComics.length > 0) setShowDropdown(true) }}
+                placeholder="搜索漫画..."
                 className="w-full rounded-lg py-2 pl-9 pr-9 text-sm outline-none focus:ring-1 focus:ring-primary"
                 style={{ border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-primary)' }}
               />
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => { setSearchQuery(''); setSearchComics([]); setSearchBooks([]); setShowDropdown(false) }}
+                  onClick={() => { setSearchQuery(''); setSearchComics([]); setShowDropdown(false) }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 hover:opacity-80"
                   style={{ color: 'var(--text-muted)' }}
                 >
@@ -278,7 +245,7 @@ export default function Layout() {
                   {searchLoading && (
                     <div className="px-4 py-3 text-center text-xs" style={{ color: 'var(--text-muted)' }}>搜索中...</div>
                   )}
-                  {!searchLoading && searchComics.length === 0 && searchBooks.length === 0 && (
+                  {!searchLoading && searchComics.length === 0 && (
                     <div className="px-4 py-3 text-center text-xs" style={{ color: 'var(--text-muted)' }}>未找到结果</div>
                   )}
                   {searchComics.length > 0 && (
@@ -304,30 +271,6 @@ export default function Layout() {
                       ))}
                     </div>
                   )}
-                  {searchBooks.length > 0 && (
-                    <div>
-                      <div className="sticky top-0 px-3 py-1.5 text-xs font-medium" style={{ borderBottom: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)' }}>图书</div>
-                      {searchBooks.map((book) => (
-                        <Link
-                          key={`book-${book.id}`}
-                          to={`/book/${book.id}`}
-                          className="flex items-center gap-3 px-3 py-2 transition-colors"
-                          style={{ color: 'var(--text-primary)' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}
-                        >
-                          <div className="h-10 w-8 shrink-0 overflow-hidden rounded" style={{ backgroundColor: 'var(--bg-surface-hover)' }}>
-                            <img src={`/api/books/${book.id}/cover`} alt="" className="h-full w-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm">{book.title}</p>
-                            {book.author && <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{book.author}</p>}
-                          </div>
-                          <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px]" style={{ backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-muted)' }}>{book.format.toUpperCase()}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -343,9 +286,8 @@ export default function Layout() {
               {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>
             <button
-              onClick={() => handleScan()}
-              disabled={loading}
-              className="rounded-lg p-2 disabled:opacity-50"
+              onClick={() => setScanOpen(true)}
+              className="rounded-lg p-2"
               style={{ color: 'var(--text-secondary)' }}
               title="扫描库"
             >
@@ -403,13 +345,9 @@ export default function Layout() {
                   <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>漫画目录</h3>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>在 .env 文件中修改 COMICS_DIR</p>
                 </div>
-                <div>
-                  <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>图书目录</h3>
-                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>在 .env 文件中修改 BOOKS_DIR</p>
-                </div>
                 <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '0.75rem' }}>
                   <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>命名方式</h3>
-                  <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>扫描时如何命名漫画和小说</p>
+                  <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>扫描时如何命名漫画</p>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => { localStorage.setItem('namingMode', 'folder'); setNamingMode('folder') }}
@@ -435,17 +373,16 @@ export default function Layout() {
                       style={namingMode !== 'metadata' ? { borderColor: 'var(--border-light)', color: 'var(--text-secondary)' } : undefined}
                     >
                       元数据名
-                      <p className="mt-0.5 text-[10px] opacity-60">使用ComicInfo/EPUB标题</p>
+                      <p className="mt-0.5 text-[10px] opacity-60">使用ComicInfo标题</p>
                     </button>
                   </div>
                 </div>
                 <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '0.75rem' }}>
                   <button
-                    onClick={() => { handleScan(); setSettingsOpen(false) }}
-                    disabled={loading}
-                    className="w-full rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-hover disabled:opacity-50"
+                    onClick={() => { setScanOpen(true); setSettingsOpen(false) }}
+                    className="w-full rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-hover"
                   >
-                    {loading ? '扫描中...' : '重新扫描库'}
+                    扫描漫画库
                   </button>
                 </div>
               </div>
@@ -453,16 +390,12 @@ export default function Layout() {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6" style={{ backgroundColor: 'var(--bg-base)' }}>
+        <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6" style={{ backgroundColor: 'var(--bg-base)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}>
           <Outlet />
         </main>
       </div>
 
-      {scanResult && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-lg px-4 py-2 text-sm shadow-xl" style={{ border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
-          {scanResult}
-        </div>
-      )}
+      <ScanDialog open={scanOpen} onClose={() => setScanOpen(false)} />
     </div>
   )
 }

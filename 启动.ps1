@@ -1,9 +1,8 @@
-﻿[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
-System.Text.ASCIIEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "   ComicReader - Yi Jian Qi Dong" -ForegroundColor Cyan
+Write-Host "   OwnShelf - Yi Jian Qi Dong" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -34,16 +33,13 @@ if ($needBuild) {
     if ($LASTEXITCODE -ne 0) { Write-Host "[Error] Server build failed" -ForegroundColor Red; Read-Host "Press Enter"; exit 1 }
     pnpm --filter web build
     if ($LASTEXITCODE -ne 0) { Write-Host "[Error] Web build failed" -ForegroundColor Red; Read-Host "Press Enter"; exit 1 }
-    if (-not (Test-Path "$ROOT\server\static")) { New-Item -ItemType Directory -Path "$ROOT\server\static" | Out-Null }
-    Copy-Item -Path "$ROOT\web\dist\*" -Destination "$ROOT\server\static\" -Recurse -Force
-    pnpm --filter server db:push
     Write-Host "[Info] Build complete!" -ForegroundColor Green
 }
 
 Write-Host "[Info] Starting server..." -ForegroundColor Yellow
-Write-Host "[Info] URL: http://localhost:8080" -ForegroundColor Green
+Write-Host "[Info] URL: http://localhost:7788" -ForegroundColor Green
 Write-Host ""
 
 Set-Location "$ROOT\server"
-Start-Process "http://localhost:8080"
+Start-Process "http://localhost:7788"
 node dist/index.js

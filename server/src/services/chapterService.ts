@@ -5,6 +5,7 @@ import AdmZip from 'adm-zip'
 import fs from 'fs'
 import path from 'path'
 import { isImageFile, naturalSort } from '@/utils/index.js'
+import { listRarImages, readRarImage } from './rarUtils.js'
 
 const { chapters, comics } = schema
 
@@ -30,7 +31,7 @@ export const chapterService = {
     const [comic] = await db.select().from(comics).where(eq(comics.id, chapter.comicId))
     if (!comic) return []
 
-    const imageNames = this.listChapterImages(chapter.filePath, comic.fileType)
+    const imageNames = await this.listChapterImages(chapter.filePath, comic.fileType)
     return imageNames.map((name, index) => `/api/chapters/${chapterId}/pages/${index + 1}`)
   },
 
@@ -49,7 +50,9 @@ export const chapterService = {
     }
 
     if (ext === '.cbr' || ext === '.rar') {
-      return this.readFromArchive(filePath, pageNum)
+      const names = await listRarImages(filePath)
+      if (pageNum < 1 || pageNum > names.length) return null
+      return readRarImage(filePath, names[pageNum - 1]!)
     }
 
     if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
@@ -63,7 +66,7 @@ export const chapterService = {
     return null
   },
 
-  listChapterImages(filePath: string, fileType: string): string[] {
+  async listChapterImages(filePath: string, fileType: string): Promise<string[]> {
     const ext = path.extname(filePath).toLowerCase()
 
     if (ext === '.cbz' || ext === '.zip') {
@@ -78,6 +81,10 @@ export const chapterService = {
       } catch {
         return []
       }
+    }
+
+    if (ext === '.cbr' || ext === '.rar') {
+      return listRarImages(filePath)
     }
 
     if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
@@ -200,7 +207,7 @@ export const chapterService = {
     }
     chapterBackups.delete(chapterId)
 
-    const imageNames = this.listChapterImages(filePath, ext === '.cbz' || ext === '.zip' ? 'cbz' : 'folder')
+    const imageNames = await this.listChapterImages(filePath, ext === '.cbz' || ext === '.zip' ? 'cbz' : 'folder')
     await db.update(chapters).set({
       pageCount: imageNames.length,
       updatedAt: new Date().toISOString(),

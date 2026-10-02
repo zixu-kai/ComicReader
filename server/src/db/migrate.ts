@@ -16,89 +16,6 @@ const migrationStatements = [
 )`,
 `CREATE INDEX IF NOT EXISTS idx_annotations_target ON annotations (target_type, target_id)`,
 
-`CREATE TABLE IF NOT EXISTS book_bookmarks (
-  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-  book_id integer NOT NULL,
-  cfi text NOT NULL,
-  title text,
-  created_at text NOT NULL,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON UPDATE no action ON DELETE cascade
-)`,
-`CREATE INDEX IF NOT EXISTS idx_book_bookmarks_book ON book_bookmarks (book_id)`,
-
-`CREATE TABLE IF NOT EXISTS book_chapters (
-  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-  book_id integer NOT NULL,
-  title text NOT NULL,
-  start_pos integer NOT NULL,
-  end_pos integer NOT NULL,
-  sort_order integer DEFAULT 0 NOT NULL,
-  created_at text NOT NULL,
-  updated_at text NOT NULL,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON UPDATE no action ON DELETE cascade
-)`,
-`CREATE INDEX IF NOT EXISTS idx_book_chapters_book ON book_chapters (book_id)`,
-
-`CREATE TABLE IF NOT EXISTS book_notes (
-  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-  book_id integer NOT NULL,
-  cfi text NOT NULL,
-  text text NOT NULL,
-  note text,
-  created_at text NOT NULL,
-  updated_at text NOT NULL,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON UPDATE no action ON DELETE cascade
-)`,
-`CREATE INDEX IF NOT EXISTS idx_book_notes_book ON book_notes (book_id)`,
-
-`CREATE TABLE IF NOT EXISTS book_ratings (
-  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-  book_id integer NOT NULL,
-  score integer DEFAULT 0 NOT NULL,
-  reading_status text DEFAULT 'unread' NOT NULL,
-  notes text,
-  created_at text NOT NULL,
-  updated_at text NOT NULL,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON UPDATE no action ON DELETE cascade
-)`,
-`CREATE UNIQUE INDEX IF NOT EXISTS book_ratings_book_id_unique ON book_ratings (book_id)`,
-`CREATE INDEX IF NOT EXISTS idx_book_ratings_book ON book_ratings (book_id)`,
-`CREATE INDEX IF NOT EXISTS idx_book_ratings_status ON book_ratings (reading_status)`,
-
-`CREATE TABLE IF NOT EXISTS book_reading_progress (
-  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-  book_id integer NOT NULL,
-  cfi text,
-  percentage real DEFAULT 0 NOT NULL,
-  current_page integer DEFAULT 0 NOT NULL,
-  total_pages integer DEFAULT 0 NOT NULL,
-  is_completed integer DEFAULT false NOT NULL,
-  last_read_at text NOT NULL,
-  created_at text NOT NULL,
-  updated_at text NOT NULL,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON UPDATE no action ON DELETE cascade
-)`,
-`CREATE INDEX IF NOT EXISTS idx_book_progress_book ON book_reading_progress (book_id)`,
-`CREATE INDEX IF NOT EXISTS idx_book_progress_last_read ON book_reading_progress (last_read_at)`,
-
-`CREATE TABLE IF NOT EXISTS book_tags (
-  book_id integer NOT NULL,
-  tag_id integer NOT NULL,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON UPDATE no action ON DELETE cascade,
-  FOREIGN KEY (tag_id) REFERENCES tags(id) ON UPDATE no action ON DELETE cascade
-)`,
-`CREATE INDEX IF NOT EXISTS idx_book_tags_book ON book_tags (book_id)`,
-`CREATE INDEX IF NOT EXISTS idx_book_tags_tag ON book_tags (tag_id)`,
-
-`CREATE TABLE IF NOT EXISTS bookmark_books (
-  bookmark_id integer NOT NULL,
-  book_id integer NOT NULL,
-  FOREIGN KEY (bookmark_id) REFERENCES bookmarks(id) ON UPDATE no action ON DELETE cascade,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON UPDATE no action ON DELETE cascade
-)`,
-`CREATE INDEX IF NOT EXISTS idx_bookmark_books_bookmark ON bookmark_books (bookmark_id)`,
-`CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmark_books_unique ON bookmark_books (bookmark_id, book_id)`,
-
 `CREATE TABLE IF NOT EXISTS bookmark_comics (
   bookmark_id integer NOT NULL,
   comic_id integer NOT NULL,
@@ -114,31 +31,6 @@ const migrationStatements = [
   "order" integer DEFAULT 0 NOT NULL,
   created_at text NOT NULL
 )`,
-
-`CREATE TABLE IF NOT EXISTS books (
-  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-  title text NOT NULL,
-  title_sort text NOT NULL,
-  author text,
-  description text,
-  publisher text,
-  publish_date text,
-  isbn text,
-  language text,
-  page_count integer DEFAULT 0 NOT NULL,
-  format text NOT NULL,
-  path text NOT NULL,
-  cover_path text,
-  file_size integer DEFAULT 0 NOT NULL,
-  last_read_at text,
-  created_at text NOT NULL,
-  updated_at text NOT NULL
-)`,
-`CREATE UNIQUE INDEX IF NOT EXISTS books_path_unique ON books (path)`,
-`CREATE INDEX IF NOT EXISTS idx_books_title ON books (title_sort)`,
-`CREATE INDEX IF NOT EXISTS idx_books_author ON books (author)`,
-`CREATE INDEX IF NOT EXISTS idx_books_format ON books (format)`,
-`CREATE INDEX IF NOT EXISTS idx_books_created ON books (created_at)`,
 
 `CREATE TABLE IF NOT EXISTS categories (
   id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -248,21 +140,13 @@ const migrationStatements = [
 )`,
 `CREATE UNIQUE INDEX IF NOT EXISTS tags_name_unique ON tags (name)`,
 
-`ALTER TABLE book_reading_progress ADD COLUMN char_offset integer NOT NULL DEFAULT 0`,
-
 `ALTER TABLE annotations ADD COLUMN start_offset integer`,
 `ALTER TABLE annotations ADD COLUMN end_offset integer`,
 
 `ALTER TABLE categories ADD COLUMN hidden integer NOT NULL DEFAULT 0`,
 
-`CREATE TABLE IF NOT EXISTS book_categories (
-  book_id integer NOT NULL,
-  category_id integer NOT NULL,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON UPDATE no action ON DELETE cascade,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON UPDATE no action ON DELETE cascade
-)`,
-`CREATE INDEX IF NOT EXISTS idx_book_categories_book ON book_categories (book_id)`,
-`CREATE INDEX IF NOT EXISTS idx_book_categories_category ON book_categories (category_id)`,
+`ALTER TABLE tags ADD COLUMN "order" integer NOT NULL DEFAULT 0`,
+`UPDATE tags SET "order" = id WHERE "order" = 0`,
 ]
 
 export async function runMigrations() {
@@ -272,7 +156,9 @@ export async function runMigrations() {
       try {
         await db.run(sql.raw(stmt))
       } catch (err: any) {
-        if (err.message?.includes('duplicate column name') || err.message?.includes('already exists')) {
+        // DrizzleQueryError 把真实原因放在 cause 里，需两层都检查
+        const msg = `${err?.message || ''} ${err?.cause?.message || ''}`
+        if (msg.includes('duplicate column name') || msg.includes('already exists')) {
           continue
         }
         throw err

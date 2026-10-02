@@ -13,6 +13,9 @@ import AdmZip from 'adm-zip'
 
 const { comics } = schema
 
+let comicScanStatus: 'idle' | 'scanning' | 'done' = 'idle'
+let comicScanResult: any = null
+
 export async function comicRoutes(app: FastifyInstance) {
   app.get('/api/comics', async (request) => {
     const query = request.query as any
@@ -31,9 +34,19 @@ export async function comicRoutes(app: FastifyInstance) {
   })
 
   app.get('/api/comics/search', async (request) => {
-    const { q } = request.query as { q: string }
-    if (!q) return []
-    return comicService.searchComics(q)
+    const { q, page, pageSize } = request.query as { q: string; page?: string; pageSize?: string }
+    if (!q) return { data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+    const results = await comicService.searchComics(q)
+    const p = parseInt(page || '1')
+    const ps = parseInt(pageSize || '20')
+    const start = (p - 1) * ps
+    return {
+      data: results.slice(start, start + ps),
+      total: results.length,
+      page: p,
+      pageSize: ps,
+      totalPages: Math.ceil(results.length / ps),
+    }
   })
 
   app.get('/api/comics/random', async (request) => {
@@ -42,6 +55,24 @@ export async function comicRoutes(app: FastifyInstance) {
       Number(query.count) || 10,
       Number(query.categoryId) || undefined
     )
+  })
+
+  app.put('/api/comics/batch', async (request, reply) => {
+    const body = request.body as { ids?: number[]; categoryIds?: number[]; tagIds?: number[]; status?: string; year?: number; language?: string; score?: number; readingStatus?: string } | undefined
+    if (!Array.isArray(body?.ids) || body!.ids!.length === 0) {
+      reply.code(400).send({ error: 'ids array required' })
+      return
+    }
+    const count = await comicService.batchUpdate(body!.ids!.map(Number), {
+      categoryIds: body!.categoryIds,
+      tagIds: body!.tagIds,
+      status: body!.status,
+      year: body!.year,
+      language: body!.language,
+      score: body!.score,
+      readingStatus: body!.readingStatus,
+    })
+    return { success: true, count }
   })
 
   app.get('/api/comics/:id', async (request, reply) => {
@@ -86,8 +117,61 @@ export async function comicRoutes(app: FastifyInstance) {
   })
 
   app.post('/api/comics/scan', async (request) => {
-    const body = request.body as { namingMode?: string } | undefined
-    return comicService.scanLibrary(body?.namingMode)
+    const body = request.body as { namingMode?: string; scope?: string } | undefined
+    if (comicScanStatus === 'scanning') {
+      return { status: 'scanning', message: '扫描进行中' }
+    }
+    const scope = body?.scope || 'all'
+    if (scope !== 'all' && (scope.includes('/') || scope.includes('\\') || scope === '.' || scope === '..')) {
+      return { status: 'error', message: '无效的扫描范围' }
+    }
+    comicScanStatus = 'scanning'
+    comicScanResult = null
+    scanService.scanLibrary(body?.namingMode, scope).then((result) => {
+      comicScanResult = result
+      comicScanStatus = 'done'
+    }).catch(() => {
+      comicScanStatus = 'idle'
+    })
+    return { status: 'scanning', message: '扫描已开始' }
+  })
+
+  app.get('/api/comics/scan/options', async () => {
+    // 列出漫画目录下的子文件夹，供"扫描全部/扫描指定子文件夹"选择
+    const folders: string[] = []
+    try {
+      const entries = fs.readdirSync(config.comicsDir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.isDirectory()) folders.push(entry.name)
+      }
+    } catch {}
+    folders.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    return { folders }
+  })
+
+  app.get('/api/comics/scan/status', async () => {
+    if (comicScanStatus === 'done') {
+      comicScanStatus = 'idle'
+      return { status: 'done', result: comicScanResult }
+    }
+    return { status: comicScanStatus }
+  })
+
+  app.post('/api/comics/:id/refresh', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const comicId = parseInt(id)
+    const [comic] = await db.select().from(comics).where(eq(comics.id, comicId))
+    if (!comic) {
+      reply.code(404).send({ error: 'Comic not found' })
+      return
+    }
+    try {
+      const namingMode = (request.body as { namingMode?: string } | undefined)?.namingMode || 'folder'
+      const result = await scanService.refreshComic(comicId, namingMode)
+      return result
+    } catch (err) {
+      reply.code(500).send({ error: 'Refresh failed', message: err instanceof Error ? err.message : String(err) })
+    }
   })
 
   app.get('/api/comics/:id/download', async (request, reply) => {
