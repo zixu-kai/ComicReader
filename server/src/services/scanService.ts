@@ -55,6 +55,7 @@ function parseComicInfoXml(xmlContent: string): ComicInfo {
     }
     const tags = parseListField(info.Tags || info.tags || info.Genre || info.genre) || []
     // 不自动添加 Manga 标签（界面会忽略它，用户可手动管理）
+    const mangaVal = info.Manga || info.manga || undefined
     return {
       title: info.Title || info.title || undefined,
       series: info.Series || info.series || undefined,
@@ -956,26 +957,7 @@ export const scanService = {
             xmlContent = '<?xml version="1.0" encoding="utf-8"?>\n<ComicInfo>\n</ComicInfo>'
           }
 
-          const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
-          const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true })
-
-          const parsed = parser.parse(xmlContent)
-          const info = parsed.ComicInfo || parsed.comicinfo || {}
-
-          if (data.title !== undefined) info.Title = data.title
-          if (data.author !== undefined) info.Writer = data.author
-          if (data.artist !== undefined) info.Penciller = data.artist
-          if (data.description !== undefined) info.Summary = data.description
-          if (data.status !== undefined) {
-            const statusMap: Record<string, string> = { ongoing: 'Ongoing', completed: 'Completed', unknown: 'Unknown' }
-            info.PublishingStatus = statusMap[data.status] || data.status
-          }
-          if (data.year !== undefined) info.Year = String(data.year)
-          if (data.tags !== undefined) info.Tags = data.tags.join(', ')
-          if (data.categories !== undefined) info.Categories = data.categories.join(', ')
-
-          parsed.ComicInfo = info
-          const newXml = builder.build(parsed)
+          const newXml = mergeComicInfoData(xmlContent, data)
 
           if (existingInfo) {
             zip.updateFile(existingInfo, Buffer.from(newXml, 'utf-8'))
@@ -989,5 +971,50 @@ export const scanService = {
         }
       }
     }
+
+    // 同步更新漫画文件夹根目录的 ComicInfo.xml，保证重新扫描后修改依然生效
+    try {
+      const comicPath = comic.path
+      if (comicPath && fs.existsSync(comicPath) && fs.statSync(comicPath).isDirectory()) {
+        const xmlPath = path.join(comicPath, 'ComicInfo.xml')
+        let xmlContent: string
+        if (fs.existsSync(xmlPath)) {
+          xmlContent = fs.readFileSync(xmlPath, 'utf-8')
+        } else {
+          xmlContent = '<?xml version="1.0" encoding="utf-8"?>\n<ComicInfo>\n</ComicInfo>'
+        }
+        const newXml = mergeComicInfoData(xmlContent, data)
+        fs.writeFileSync(xmlPath, newXml, 'utf-8')
+      }
+    } catch (err) {
+      console.error(`Failed to update ComicInfo.xml in ${comic.path}:`, err)
+    }
   },
+}
+
+function mergeComicInfoData(xmlContent: string, data: { title?: string; author?: string; artist?: string; description?: string; status?: string; year?: number; tags?: string[]; categories?: string[] }): string {
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+  const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true })
+
+  const parsed = parser.parse(xmlContent)
+  const info = parsed.ComicInfo || parsed.comicinfo || {}
+
+  if (data.title !== undefined) {
+    info.Title = data.title
+    // 重扫（元数据命名模式）优先读 Series，同步更新保证书名修改不丢失
+    info.Series = data.title
+  }
+  if (data.author !== undefined) info.Writer = data.author
+  if (data.artist !== undefined) info.Penciller = data.artist
+  if (data.description !== undefined) info.Summary = data.description
+  if (data.status !== undefined) {
+    const statusMap: Record<string, string> = { ongoing: 'Ongoing', completed: 'Completed', unknown: 'Unknown' }
+    info.PublishingStatus = statusMap[data.status] || data.status
+  }
+  if (data.year !== undefined) info.Year = String(data.year)
+  if (data.tags !== undefined) info.Tags = data.tags.join(', ')
+  if (data.categories !== undefined) info.Categories = data.categories.join(', ')
+
+  parsed.ComicInfo = info
+  return builder.build(parsed)
 }

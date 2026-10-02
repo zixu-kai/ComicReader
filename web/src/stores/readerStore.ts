@@ -52,7 +52,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   setReadingMode: (mode) => set({ readingMode: mode }),
   setReadingDirection: (direction) => set({ readingDirection: direction }),
-  setZoom: (zoom) => set({ zoom: Math.max(50, Math.min(300, zoom)) }),
+  setZoom: (zoom) => set({ zoom: Math.max(25, Math.min(200, zoom)) }),
 
   nextPage: () => {
     const { currentPage, totalPages, readingMode, readingDirection } = get()

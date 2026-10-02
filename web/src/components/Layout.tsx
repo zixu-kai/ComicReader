@@ -19,7 +19,6 @@ import { useAppStore } from '@/stores/appStore'
 import { comicsApi } from '@/services/api'
 import type { Comic } from '@/types'
 import clsx from 'clsx'
-import DonateButton from '@/components/DonateButton'
 import ScanDialog from '@/components/ScanDialog'
 
 const navItems = [
@@ -160,7 +159,6 @@ export default function Layout() {
           </nav>
 
           <div className="p-2" style={{ borderTop: '1px solid var(--border-default)' }}>
-            <DonateButton />
             <button
               onClick={() => setScanOpen(true)}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium"

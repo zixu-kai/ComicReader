@@ -292,6 +292,16 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     setTimeout(() => { isSwipingRef.current = false }, 100)
   }, [readingDirection, handleNextPage, handlePrevPage, isScrollMode, isSlideMode, zoom])
 
+  const handleScrollClick = useCallback((e: React.MouseEvent) => {
+    if (editModeRef.current) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const width = rect.width
+    if (x >= width / 3 && x <= (width * 2) / 3) {
+      setShowControls(prev => !prev)
+    }
+  }, [])
+
   const handleScroll = useCallback(() => {
     const now = Date.now()
     if (now - lastScrollTimeRef.current < 300) return
@@ -566,8 +576,8 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
 
     if (isScroll) {
       return (
-        <div ref={scrollContainerRef} className={contentClass + " overflow-y-auto"} onScroll={handleScroll} onTouchStart={handleScrollTouchStart} onTouchEnd={handleScrollTouchEnd}>
-          <div className="mx-auto max-w-3xl">
+        <div ref={scrollContainerRef} className={contentClass + " overflow-y-auto"} onScroll={handleScroll} onTouchStart={handleScrollTouchStart} onTouchEnd={handleScrollTouchEnd} onClick={handleScrollClick}>
+          <div className="mx-auto" style={{ width: `${zoom}%`, maxWidth: 'none' }}>
             {Array.from({ length: tp }, (_, i) => i + 1).map((pageIdx) => {
               if (editMode) {
                 const page = pageList[pageIdx - 1]
@@ -642,23 +652,19 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
         {displayPages.map((pageNum) => (
           <div key={pageNum} className="h-full flex items-center justify-center" style={{ maxWidth: readerMode === 'double' ? '50%' : '100%' }}>
             {!imageErrors.has(pageNum) ? (
-              zoom > 100 ? (
-                // 放大模式：可滚动平移查看细节（避免 transform 缩放被裁剪）
-                <div className="h-full w-full overflow-auto">
-                  <div className="flex min-h-full w-full items-center justify-center">
-                    <img
-                      src={getPageImageUrl(pageNum)}
-                      alt=""
-                      className="object-contain"
-                      style={{ width: `${zoom}%`, height: 'auto', maxWidth: 'none' }}
-                      onError={() => setImageErrors((prev) => new Set(prev).add(pageNum))}
-                      draggable={false}
-                    />
-                  </div>
+              // 连续缩放：maxWidth/maxHeight 按 zoom 百分比缩放，100% 为适配屏幕，200% 为两倍
+              <div className="h-full w-full overflow-auto">
+                <div className="flex min-h-full w-full items-center justify-center">
+                  <img
+                    src={getPageImageUrl(pageNum)}
+                    alt=""
+                    className="object-contain"
+                    style={{ maxWidth: `${zoom}%`, maxHeight: `${zoom}%`, width: 'auto', height: 'auto' }}
+                    onError={() => setImageErrors((prev) => new Set(prev).add(pageNum))}
+                    draggable={false}
+                  />
                 </div>
-              ) : (
-                <img src={getPageImageUrl(pageNum)} alt="" className="max-h-full max-w-full object-contain" onError={() => setImageErrors((prev) => new Set(prev).add(pageNum))} draggable={false} />
-              )
+              </div>
             ) : (
               <div className="flex h-64 w-48 items-center justify-center rounded text-sm" style={{ backgroundColor: '#1f2937', color: '#9ca3af' }}>加载失败</div>
             )}
@@ -890,7 +896,7 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
           </div>
           <div>
             <label className="mb-1.5 block text-xs" style={{ color: 'var(--text-secondary)' }}>缩放 {zoom}%</label>
-            <input type="range" min={50} max={300} value={zoom} onChange={(e) => setZoom(parseInt(e.target.value))} className="w-full accent-primary" />
+            <input type="range" min={25} max={200} step={5} value={zoom} onChange={(e) => setZoom(parseInt(e.target.value))} className="w-full accent-primary" />
           </div>
         </div>
       )}

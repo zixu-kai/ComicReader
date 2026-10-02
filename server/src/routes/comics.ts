@@ -4,14 +4,14 @@ import { comicService } from '@/services/comicService.js'
 import { chapterService } from '@/services/chapterService.js'
 import { scanService } from '@/services/scanService.js'
 import { db, schema } from '@/db/index.js'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import fs from 'fs'
 import path from 'path'
 import sharp from 'sharp'
 import config from '@/config/index.js'
 import AdmZip from 'adm-zip'
 
-const { comics } = schema
+const { comics, tags, categories } = schema
 
 let comicScanStatus: 'idle' | 'scanning' | 'done' = 'idle'
 let comicScanResult: any = null
@@ -88,10 +88,44 @@ export async function comicRoutes(app: FastifyInstance) {
   app.put('/api/comics/:id', async (request, reply) => {
     const { id } = request.params as { id: string }
     const data = request.body as any
-    const comic = await comicService.updateComic(parseInt(id), data)
+    const comicId = parseInt(id)
+    const comic = await comicService.updateComic(comicId, data)
     if (!comic) {
       reply.code(404).send({ error: 'Comic not found' })
       return
+    }
+    // 同步写回 ComicInfo.xml，保证编辑（书名/作者/简介/状态/标签/分类）重扫后仍生效
+    try {
+      const xmlData: { title?: string; author?: string; artist?: string; description?: string; status?: string; year?: number; tags?: string[]; categories?: string[] } = {}
+      if (data.title !== undefined) xmlData.title = data.title
+      if (data.author !== undefined) xmlData.author = data.author
+      if (data.artist !== undefined) xmlData.artist = data.artist
+      if (data.description !== undefined) xmlData.description = data.description
+      if (data.status !== undefined) xmlData.status = data.status
+      if (data.year !== undefined) xmlData.year = data.year
+      if (data.tagIds !== undefined) {
+        const tagIds = (data.tagIds as number[]).filter(t => typeof t === 'number')
+        if (tagIds.length > 0) {
+          const tagRows = await db.select({ name: tags.name }).from(tags).where(sql`${tags.id} IN (${sql.join(tagIds.map(t => sql`${t}`), sql`,` )})`)
+          xmlData.tags = tagRows.map(r => r.name)
+        } else {
+          xmlData.tags = []
+        }
+      }
+      if (data.categoryIds !== undefined) {
+        const catIds = (data.categoryIds as number[]).filter(c => typeof c === 'number')
+        if (catIds.length > 0) {
+          const catRows = await db.select({ name: categories.name }).from(categories).where(sql`${categories.id} IN (${sql.join(catIds.map(c => sql`${c}`), sql`,` )})`)
+          xmlData.categories = catRows.map(r => r.name)
+        } else {
+          xmlData.categories = []
+        }
+      }
+      if (Object.keys(xmlData).length > 0) {
+        await scanService.updateComicInfo(comicId, xmlData)
+      }
+    } catch (err) {
+      console.error('Failed to sync ComicInfo.xml:', err)
     }
     return comic
   })

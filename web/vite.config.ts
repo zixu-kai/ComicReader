@@ -11,13 +11,7 @@ export default defineConfig(({ mode }) => ({
       'shared': path.resolve(__dirname, '../shared/types/index.ts'),
     },
   },
-  define: mode === 'github' ? {
-    __SHOW_DONATE__: JSON.stringify(true),
-  } : mode === 'nodonate' ? {
-    __SHOW_DONATE__: JSON.stringify(false),
-  } : {
-    __SHOW_DONATE__: JSON.stringify(true),
-  },
+  define: {},
   build: {
     outDir: mode === 'github'
       ? path.resolve(__dirname, '../release/github-static')
