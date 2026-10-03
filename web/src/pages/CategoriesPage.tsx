@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useCategoryStore } from '@/stores/categoryStore'
+import { useNavigate } from 'react-router'
 import {
   Pencil,
   Trash2,
@@ -13,6 +14,7 @@ import {
 import type { Category } from '@/types'
 
 export default function CategoriesPage() {
+  const navigate = useNavigate()
   const { categories, tags, fetchCategories, fetchTags, createCategory, updateCategory, deleteCategory, toggleCategoryHidden, createTag, moveTag, batchDeleteTags, deleteTag } = useCategoryStore()
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -317,7 +319,15 @@ export default function CategoriesPage() {
                       className="accent-primary shrink-0"
                     />
                     <div className="min-w-0 flex-1">
-                      <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{tag.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/library?tagId=${tag.id}`)}
+                        className="text-sm transition-colors hover:text-primary"
+                        style={{ color: 'var(--text-primary)' }}
+                        title="点击筛选该标签的漫画"
+                      >
+                        {tag.name}
+                      </button>
                       {tag.comicCount !== undefined && tag.comicCount > 0 && (
                         <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>{tag.comicCount} 部</span>
                       )}

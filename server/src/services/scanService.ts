@@ -990,6 +990,56 @@ export const scanService = {
       console.error(`Failed to update ComicInfo.xml in ${comic.path}:`, err)
     }
   },
+
+  // 删除标签时，同步从该漫画所有 ComicInfo.xml（文件夹根目录 + 各章节 CBZ 内）移除对应标签名
+  async removeTagsFromComicInfo(comicId: number, tagNames: string[]): Promise<void> {
+    if (tagNames.length === 0) return
+    const [comic] = await db.select().from(comics).where(eq(comics.id, comicId))
+    if (!comic) return
+    const nameSet = new Set(tagNames.map(n => n.toLowerCase()))
+
+    const stripTags = (xmlContent: string): string => {
+      const parsed = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' }).parse(xmlContent)
+      const info = parsed.ComicInfo || parsed.comicinfo || {}
+      const current = parseListField(info.Tags || info.tags)
+      if (!current || current.length === 0) return xmlContent
+      const kept = current.filter(t => !nameSet.has(t.toLowerCase()))
+      return mergeComicInfoData(xmlContent, { tags: kept })
+    }
+
+    // 漫画文件夹根目录的 ComicInfo.xml
+    const comicPath = comic.path
+    if (comicPath && fs.existsSync(comicPath) && fs.statSync(comicPath).isDirectory()) {
+      const xmlPath = path.join(comicPath, 'ComicInfo.xml')
+      if (fs.existsSync(xmlPath)) {
+        try {
+          const content = fs.readFileSync(xmlPath, 'utf-8')
+          fs.writeFileSync(xmlPath, stripTags(content), 'utf-8')
+        } catch (err) {
+          console.error(`Failed to update ComicInfo.xml in ${xmlPath}:`, err)
+        }
+      }
+    }
+
+    // 各章节 CBZ / ZIP 内的 ComicInfo.xml
+    const chapterRows = await db.select().from(chapters).where(eq(chapters.comicId, comicId))
+    for (const chapter of chapterRows) {
+      const filePath = chapter.filePath
+      if (!filePath) continue
+      const ext = path.extname(filePath).toLowerCase()
+      if (ext !== '.cbz' && ext !== '.zip') continue
+      try {
+        const zip = new AdmZip(filePath)
+        const entry = zip.getEntries().find(e => !e.isDirectory && e.entryName.toLowerCase().endsWith('comicinfo.xml'))
+        if (!entry) continue
+        const newXml = stripTags(entry.getData().toString('utf-8'))
+        zip.updateFile(entry, Buffer.from(newXml, 'utf-8'))
+        zip.writeZip(filePath)
+      } catch (err) {
+        console.error(`Failed to update ComicInfo.xml in ${filePath}:`, err)
+      }
+    }
+  },
 }
 
 function mergeComicInfoData(xmlContent: string, data: { title?: string; author?: string; artist?: string; description?: string; status?: string; year?: number; tags?: string[]; categories?: string[] }): string {

@@ -7,7 +7,8 @@ services:
       - "7788:7788"
     volumes:
       - ./data:/app/data
-      - /volume1/comics:/comics:ro
+      # 漫画目录必须可读写：程序需要删除漫画文件夹、写回 ComicInfo.xml
+      - /volume1/comics:/comics
     environment:
       - COMICS_DIR=/comics
       - DB_PATH=/app/data/ownshelf.db

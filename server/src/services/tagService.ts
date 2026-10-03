@@ -1,5 +1,6 @@
 import { eq, asc, sql } from 'drizzle-orm'
 import { db, schema } from '@/db/index.js'
+import { scanService } from '@/services/scanService.js'
 import type { Tag } from '@/types/index.js'
 
 const { tags, comicTags } = schema
@@ -48,12 +49,35 @@ export const tagService = {
 
   async deleteTags(ids: number[]): Promise<number> {
     if (ids.length === 0) return 0
-    await db.delete(comicTags).where(sql`${comicTags.tagId} IN (${sql.join(ids.map(id => sql`${id}`), sql`,` )})`)
-    await db.delete(tags).where(sql`${tags.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`,` )})`)
+    const idList = ids.map(Number).filter(n => Number.isFinite(n) && n > 0)
+    if (idList.length === 0) return 0
+
+    const idIn = sql.join(idList.map(id => sql`${id}`), sql`,`)
+    const tagRows = await db.select().from(tags).where(sql`${tags.id} IN (${idIn})`)
+    const linkRows = await db
+      .select({ comicId: comicTags.comicId })
+      .from(comicTags)
+      .where(sql`${comicTags.tagId} IN (${idIn})`)
+      .groupBy(comicTags.comicId)
+
+    await db.delete(comicTags).where(sql`${comicTags.tagId} IN (${idIn})`)
+    await db.delete(tags).where(sql`${tags.id} IN (${idIn})`)
+
+    // 同步从受影响漫画的 ComicInfo.xml 中移除这些标签
+    if (tagRows.length > 0) {
+      const names = tagRows.map(t => t.name)
+      for (const { comicId } of linkRows) {
+        try {
+          await scanService.removeTagsFromComicInfo(comicId, names)
+        } catch (err) {
+          console.error(`Failed to remove tags from ComicInfo.xml (comic ${comicId}):`, err)
+        }
+      }
+    }
     return ids.length
   },
 
   async deleteTag(id: number): Promise<void> {
-    await db.delete(tags).where(eq(tags.id, id))
+    await this.deleteTags([id])
   },
 }
