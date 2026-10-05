@@ -4,17 +4,30 @@
 
 ---
 
+## 📌 最近更新（v1.1.3）
+
+- **操作进度**：扫描库显示实时进度条（正在处理 X/N + 百分比）；删除漫画/标签显示"删除中"状态
+- **标签拖动排序**：标签管理页按住手柄拖动即可调整顺序
+- **搜索栏合并**：顶部栏统一放置搜索框 + 筛选按钮（带筛选计数），漫画库筛选面板可由顶部按钮展开/收起
+- **按子文件夹扫描**：漫画目录按序号子文件夹（1/2/3…）组织时，可选择只扫某一个文件夹，或选"全部"一次性扫描；互不影响
+- **继续阅读修复**：读完中间章节不再误判为"已完结"；翻到上一章从末尾开始
+- **ComicInfo.xml 双向同步**：编辑信息、删除标签都会同步写回 ComicInfo.xml；删除漫画同步删除文件夹
+- 更早版本更新记录见 [CHANGELOG.md](CHANGELOG.md)
+
+---
+
 ## ✨ 特性
 
-- 📚 **漫画阅读** — 支持 CBZ、CBR、ZIP、RAR 和图片文件夹格式的漫画，提供流畅的翻页阅读体验
-- 🏷️ **分类与标签** — 自由创建分类目录，为作品添加标签，轻松管理成千上万本漫画
+- 📚 **漫画阅读** — 支持 CBZ、CBR、ZIP、RAR 和图片文件夹格式的漫画，提供单页/双页/滑动/上下滚动四种阅读模式
+- 🏷️ **分类与标签** — 自由创建分类目录，为作品添加标签，支持拖动排序与多选删除
 - ⭐ **评分与书签** — 给喜欢的作品打分，收藏精彩作品
-- 📌 **阅读进度** — 自动记录阅读进度，下次打开无缝续读
+- 📌 **阅读进度** — 自动记录阅读进度，首页"继续阅读"无缝续读
 - 🎲 **随机推荐** — 选择困难？让随机功能帮你决定今天看什么
-- 🔍 **全文搜索** — 快速搜索书名、作者、标签，找到想看的内容
+- 🔍 **全文搜索** — 顶部搜索框快速搜索书名、作者，配合分类/标签/状态/作者筛选
+- 🧹 **元数据同步** — 编辑书名/作者/简介/标签等会同步写回 ComicInfo.xml，重新扫描不丢失
 - ✂️ **章节编辑** — 在阅读器中直接删除/插入页面，修改实时写回源文件
 - 🌐 **响应式设计** — 适配桌面端和移动端浏览器，随时随地阅读
-- 🐳 **Docker 部署** — 一条命令即可在 NAS 或服务器上运行
+- 🐳 **Docker 部署** — GitHub Releases 部署包 + GHCR 镜像两种方式，适合绿联/群晖等 NAS
 - 🪶 **轻量级** — 基于 SQLite 数据库，无需额外安装数据库服务
 
 ---
@@ -226,6 +239,8 @@ docker pull ghcr.io/zixu-kai/comicreader:latest
 
 ### docker-compose.yaml 配置说明
 
+> **⚠️ 重要**：漫画目录的挂载**必须可读写**（不要加 `:ro`），否则容器无法删除漫画文件夹、也无法把编辑/删标签同步写回 ComicInfo.xml。
+
 ```yaml
 services:
   ownshelf:
@@ -235,7 +250,7 @@ services:
       - "7788:7788"
     volumes:
       - ./data:/app/data          # 数据库和封面缓存（勿改）
-      - /volume1/comics:/comics   # 改为你的漫画目录路径
+      - /volume1/comics:/comics   # 改为你的漫画目录路径（可读写，勿加 :ro）
     environment:
       - COMICS_DIR=/comics
       - DB_PATH=/app/data/ownshelf.db
@@ -253,8 +268,34 @@ services:
 | 配置项 | 说明 |
 |--------|------|
 | `JWT_SECRET` | **务必修改**为随机字符串 |
-| `/volume1/comics` | 改为你的漫画存放路径（绿联 NAS 通常为 `/volume1/共享文件夹名`） |
-| `PUID` / `PGID` | 留空以 root 运行；填入 UID:GID 可降权运行（需确保该用户有权限读取漫画目录） |
+| `/volume1/comics` | 改为你的漫画存放路径（绿联 NAS 通常为 `/volume1/共享文件夹名`），**必须可读写** |
+| `PUID` / `PGID` | 留空以 root 运行；填入 UID:GID 可降权运行（需确保该用户有权限读写漫画目录） |
+
+### 通过 GHCR 镜像部署（无需本地构建）
+
+如果不想从源码构建，可直接拉取官方镜像（amd64 + arm64）：
+
+```yaml
+services:
+  ownshelf:
+    image: ghcr.io/zixu-kai/comicreader:latest
+    pull_policy: always
+    container_name: ownshelf
+    ports:
+      - "7788:7788"
+    volumes:
+      - ./data:/app/data
+      - /volume1/comics:/comics   # 可读写
+    environment:
+      - COMICS_DIR=/comics
+      - DB_PATH=/app/data/ownshelf.db
+      - COVERS_DIR=/app/data/covers
+      - HOST=0.0.0.0
+      - PORT=7788
+      - JWT_SECRET=change-me-in-production
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+```
 
 ### 支持的文件格式
 

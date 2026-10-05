@@ -91,7 +91,7 @@ export const comicsApi = {
 
   scanOptions: () => request<{ folders: string[] }>('/comics/scan/options'),
 
-  scanStatus: () => request<{ status: string; result?: ScanResult }>('/comics/scan/status'),
+  scanStatus: () => request<{ status: string; result?: ScanResult; progress?: { phase: string; total: number; processed: number; current: string } }>('/comics/scan/status'),
 
   refresh: (id: number, namingMode?: string) => request<{ updated: boolean; added: number; removed: number }>(`/comics/${id}/refresh`, { method: 'POST', body: JSON.stringify({ namingMode: namingMode || 'folder' }) }),
 
@@ -190,6 +190,9 @@ export const tagsApi = {
 
   move: (id: number, direction: 'up' | 'down') =>
     request<{ success: boolean }>(`/tags/${id}/move`, { method: 'PUT', body: JSON.stringify({ direction }) }),
+
+  reorder: (ids: number[]) =>
+    request<{ success: boolean }>('/tags/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
 
   batchDelete: (ids: number[]) =>
     request<{ success: boolean; count: number }>('/tags/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) }),

@@ -8,14 +8,13 @@ import {
   X,
   Eye,
   EyeOff,
-  ChevronUp,
-  ChevronDown,
+  GripVertical,
 } from 'lucide-react'
-import type { Category } from '@/types'
+import type { Category, Tag } from '@/types'
 
 export default function CategoriesPage() {
   const navigate = useNavigate()
-  const { categories, tags, fetchCategories, fetchTags, createCategory, updateCategory, deleteCategory, toggleCategoryHidden, createTag, moveTag, batchDeleteTags, deleteTag } = useCategoryStore()
+  const { categories, tags, fetchCategories, fetchTags, createCategory, updateCategory, deleteCategory, toggleCategoryHidden, createTag, reorderTags, batchDeleteTags, deleteTag } = useCategoryStore()
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryDesc, setNewCategoryDesc] = useState('')
@@ -24,11 +23,22 @@ export default function CategoriesPage() {
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([])
+  const [deletingTagId, setDeletingTagId] = useState<number | null>(null)
+  const [deletingBatch, setDeletingBatch] = useState(false)
+
+  // 拖拽排序相关状态
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [dragList, setDragList] = useState<Tag[] | null>(null)
 
   useEffect(() => {
     fetchCategories(true)
     fetchTags()
   }, [])
+
+  useEffect(() => {
+    setDragList(null)
+  }, [tags])
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) return
@@ -51,21 +61,63 @@ export default function CategoriesPage() {
   }
 
   const handleDeleteTag = async (id: number) => {
-    if (confirm('确定要删除此标签吗？')) {
-      await deleteTag(id)
-      setSelectedTagIds((prev) => prev.filter((x) => x !== id))
+    if (confirm('确定要删除此标签吗？\n\n相关漫画的 ComicInfo.xml 会同步移除该标签。')) {
+      setDeletingTagId(id)
+      try {
+        await deleteTag(id)
+        setSelectedTagIds((prev) => prev.filter((x) => x !== id))
+      } finally {
+        setDeletingTagId(null)
+      }
     }
   }
 
-  const handleMoveTag = async (id: number, direction: 'up' | 'down') => {
-    await moveTag(id, direction)
+  const handleDragStart = (e: React.DragEvent, tag: Tag) => {
+    e.dataTransfer.effectAllowed = 'move'
+    setDragId(tag.id)
+    setDragList(tags)
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    if (dragId === null) return
+    setDragOverIndex(index)
+    setDragList((prev) => {
+      const base = prev ?? tags
+      const rest = base.filter((t) => t.id !== dragId)
+      const dragged = base.find((t) => t.id === dragId)
+      if (!dragged) return base
+      const next = [...rest]
+      next.splice(Math.min(index, next.length), 0, dragged)
+      return next
+    })
+  }
+
+  const handleDrop = async () => {
+    if (dragId === null) return
+    const ids = (dragList ?? tags).map((t) => t.id)
+    setDragId(null)
+    setDragOverIndex(null)
+    setDragList(null)
+    await reorderTags(ids)
+  }
+
+  const handleDragEnd = () => {
+    setDragId(null)
+    setDragOverIndex(null)
+    setDragList(null)
   }
 
   const handleBatchDeleteTags = async () => {
     if (selectedTagIds.length === 0) return
-    if (confirm(`确定删除选中的 ${selectedTagIds.length} 个标签吗？`)) {
-      await batchDeleteTags(selectedTagIds)
-      setSelectedTagIds([])
+    if (confirm(`确定删除选中的 ${selectedTagIds.length} 个标签吗？\n\n相关漫画的 ComicInfo.xml 会同步移除这些标签。`)) {
+      setDeletingBatch(true)
+      try {
+        await batchDeleteTags(selectedTagIds)
+        setSelectedTagIds([])
+      } finally {
+        setDeletingBatch(false)
+      }
     }
   }
 
@@ -269,12 +321,14 @@ export default function CategoriesPage() {
             </button>
             <button
               onClick={handleBatchDeleteTags}
-              disabled={selectedTagIds.length === 0}
+              disabled={selectedTagIds.length === 0 || deletingBatch}
               className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs transition-colors disabled:opacity-40"
               style={{ borderColor: 'rgba(239, 68, 68, 0.35)', color: 'var(--accent-red)' }}
             >
-              <Trash2 className="h-3 w-3" />
-              删除选中
+              {deletingBatch
+                ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent-red border-t-transparent" />
+                : <Trash2 className="h-3 w-3" />}
+              {deletingBatch ? '删除中...' : '删除选中'}
             </button>
           </div>
         </div>
@@ -300,18 +354,40 @@ export default function CategoriesPage() {
             <div className="py-4 text-center text-sm" style={{ color: 'var(--text-muted)' }}>暂无标签</div>
           ) : (
             <div className="divide-y" style={{ borderColor: 'var(--border-default)' }}>
-              {tags.map((tag, index) => {
+              {(dragList ?? tags).map((tag, index) => {
                 const isSelected = selectedTagIds.includes(tag.id)
-                const isFirst = index === 0
-                const isLast = index === tags.length - 1
+                const isDragging = dragId === tag.id
+                const isDragOver = dragOverIndex === index && dragId !== null && dragId !== tag.id
                 return (
                   <div
                     key={tag.id}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={() => handleDrop()}
                     className="flex items-center gap-3 px-4 py-2.5 transition-colors"
-                    style={{ backgroundColor: isSelected ? 'rgba(var(--primary-rgb), 0.08)' : 'transparent' }}
-                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)' }}
-                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent' }}
+                    style={{
+                      backgroundColor: isSelected
+                        ? 'rgba(var(--primary-rgb), 0.08)'
+                        : isDragOver
+                          ? 'rgba(var(--primary-rgb), 0.15)'
+                          : 'transparent',
+                      opacity: isDragging ? 0.4 : 1,
+                      borderTop: isDragOver ? '2px solid var(--primary)' : undefined,
+                    }}
+                    onMouseEnter={(e) => { if (!isSelected && !isDragOver) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)' }}
+                    onMouseLeave={(e) => { if (!isSelected && !isDragOver) e.currentTarget.style.backgroundColor = 'transparent' }}
                   >
+                    <span
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, tag)}
+                      onDragEnd={handleDragEnd}
+                      className="cursor-grab rounded p-1 transition-colors active:cursor-grabbing"
+                      style={{ color: 'var(--text-muted)' }}
+                      title="按住拖动排序"
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-active)' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </span>
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -334,36 +410,17 @@ export default function CategoriesPage() {
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => handleMoveTag(tag.id, 'up')}
-                        disabled={isFirst}
-                        className="rounded p-1.5 transition-colors disabled:opacity-25"
-                        style={{ color: 'var(--text-muted)' }}
-                        title="上移"
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-active)' }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
-                      >
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleMoveTag(tag.id, 'down')}
-                        disabled={isLast}
-                        className="rounded p-1.5 transition-colors disabled:opacity-25"
-                        style={{ color: 'var(--text-muted)' }}
-                        title="下移"
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-active)' }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
-                      >
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
-                      <button
                         onClick={() => handleDeleteTag(tag.id)}
-                        className="rounded p-1.5 transition-colors hover:text-accent-red"
+                        disabled={deletingTagId !== null}
+                        className="rounded p-1.5 transition-colors hover:text-accent-red disabled:opacity-30"
                         style={{ color: 'var(--text-muted)' }}
                         title="删除"
                         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-active)' }}
                         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
                       >
-                        <X className="h-3.5 w-3.5" />
+                        {deletingTagId === tag.id
+                          ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent-red border-t-transparent" />
+                          : <X className="h-3.5 w-3.5" />}
                       </button>
                     </div>
                   </div>

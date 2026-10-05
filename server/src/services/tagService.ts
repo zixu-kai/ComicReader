@@ -47,6 +47,15 @@ export const tagService = {
     await db.update(tags).set({ order: current.order }).where(eq(tags.id, target.id))
   },
 
+  // 拖动排序：按传入的 ids 顺序重写 order（0 起递增）
+  async reorderTags(ids: number[]): Promise<void> {
+    const idList = ids.map(Number).filter(n => Number.isFinite(n) && n > 0)
+    if (idList.length === 0) return
+    for (let i = 0; i < idList.length; i++) {
+      await db.update(tags).set({ order: i + 1 }).where(eq(tags.id, idList[i]))
+    }
+  },
+
   async deleteTags(ids: number[]): Promise<number> {
     if (ids.length === 0) return 0
     const idList = ids.map(Number).filter(n => Number.isFinite(n) && n > 0)

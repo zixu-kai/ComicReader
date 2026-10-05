@@ -16,6 +16,7 @@ interface CategoryState {
   fetchTags: () => Promise<void>
   createTag: (name: string) => Promise<void>
   moveTag: (id: number, direction: 'up' | 'down') => Promise<void>
+  reorderTags: (ids: number[]) => Promise<void>
   batchDeleteTags: (ids: number[]) => Promise<void>
   deleteTag: (id: number) => Promise<void>
   clearError: () => void
@@ -97,6 +98,15 @@ export const useCategoryStore = create<CategoryState>((set, get) => ({
   moveTag: async (id, direction) => {
     try {
       await tagsApi.move(id, direction)
+      await get().fetchTags()
+    } catch (e) {
+      set({ error: (e as Error).message })
+    }
+  },
+
+  reorderTags: async (ids) => {
+    try {
+      await tagsApi.reorder(ids)
       await get().fetchTags()
     } catch (e) {
       set({ error: (e as Error).message })

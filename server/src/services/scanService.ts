@@ -477,6 +477,14 @@ interface ProcessItem {
   coverSource: { path: string; fileType: FileType }
 }
 
+// 扫描进度（模块级状态，供 /api/comics/scan/status 轮询返回）
+export const scanProgress = {
+  phase: 'idle' as 'idle' | 'preparing' | 'processing' | 'done',
+  total: 0,
+  processed: 0,
+  current: '',
+}
+
 export const scanService = {
   /**
    * 扫描漫画库。scope 为 'all' 时扫描整个 comicsDir；否则只扫描 comicsDir 下指定的子文件夹
@@ -485,10 +493,16 @@ export const scanService = {
   async scanLibrary(namingMode: string = 'folder', scope: string = 'all'): Promise<ScanResult> {
     const result: ScanResult = { added: 0, updated: 0, removed: 0, errors: [] }
 
+    scanProgress.phase = 'preparing'
+    scanProgress.total = 0
+    scanProgress.processed = 0
+    scanProgress.current = ''
+
     // 防路径穿越：scope 必须是单个文件夹名
     const scoped = scope && scope !== 'all'
     if (scoped && (scope.includes('/') || scope.includes('\\') || scope === '.' || scope === '..')) {
       result.errors.push(`Invalid scan scope: ${scope}`)
+      scanProgress.phase = 'done'
       return result
     }
 
@@ -497,6 +511,7 @@ export const scanService = {
     try {
       if (!fs.existsSync(scanRoot)) {
         fs.mkdirSync(scanRoot, { recursive: true })
+        scanProgress.phase = 'done'
         return result
       }
 
@@ -698,8 +713,13 @@ export const scanService = {
         console.log(`[Scan] Skipped ${skippedUnchanged.count} unchanged comics`)
       }
 
+      scanProgress.phase = 'processing'
+      scanProgress.total = itemsToProcess.length
+      scanProgress.processed = 0
+
       for (const item of itemsToProcess) {
         scannedPaths.add(item.comicPath)
+        scanProgress.current = item.title
 
         try {
           const existing = existingPathMap.get(item.comicPath)
@@ -828,7 +848,12 @@ export const scanService = {
         } catch (err) {
           result.errors.push(`Error processing ${item.comicPath}: ${err instanceof Error ? err.message : String(err)}`)
         }
+
+        scanProgress.processed++
       }
+
+      scanProgress.phase = 'done'
+      scanProgress.current = ''
 
       for (const [comicPath, comic] of existingPathMap) {
         if (!scannedPaths.has(comicPath)) {
@@ -838,6 +863,7 @@ export const scanService = {
       }
     } catch (err) {
       result.errors.push(`Scan error: ${err instanceof Error ? err.message : String(err)}`)
+      scanProgress.phase = 'done'
     }
 
     return result

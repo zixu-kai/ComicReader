@@ -15,6 +15,7 @@ export default function ScanDialog({ open, onClose }: ScanDialogProps) {
   const [scope, setScope] = useState<string>('all')
   const [scanning, setScanning] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ phase: string; total: number; processed: number; current: string } | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -36,6 +37,7 @@ export default function ScanDialog({ open, onClose }: ScanDialogProps) {
   const handleScan = async () => {
     if (scanning) return
     setScanning(true)
+    setProgress(null)
     setMessage('扫描中...')
     try {
       const namingMode = (() => {
@@ -45,6 +47,7 @@ export default function ScanDialog({ open, onClose }: ScanDialogProps) {
       const pollStatus = async () => {
         try {
           const status = await comicsApi.scanStatus()
+          if (status.progress) setProgress(status.progress)
           if (status.status === 'done') {
             const r = status.result
             if (r) {
@@ -52,16 +55,17 @@ export default function ScanDialog({ open, onClose }: ScanDialogProps) {
             } else {
               setMessage('扫描完成')
             }
+            setProgress(null)
             scanLibrary()
             setScanning(false)
           } else {
-            setTimeout(pollStatus, 1000)
+            setTimeout(pollStatus, 600)
           }
         } catch {
           setTimeout(pollStatus, 2000)
         }
       }
-      setTimeout(pollStatus, 1000)
+      setTimeout(pollStatus, 600)
     } catch {
       setMessage('扫描失败，请重试')
       setScanning(false)
@@ -115,6 +119,24 @@ export default function ScanDialog({ open, onClose }: ScanDialogProps) {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {scanning && progress && progress.total > 0 && (
+          <div className="mb-3">
+            <div className="mb-1 flex items-center justify-between text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <span>{progress.phase === 'processing' ? `正在处理 ${progress.processed} / ${progress.total} 部漫画` : '正在扫描目录...'}</span>
+              <span>{Math.round((progress.processed / progress.total) * 100)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--bg-surface-hover)' }}>
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0}%` }}
+              />
+            </div>
+            {progress.phase === 'processing' && progress.current && (
+              <p className="mt-1 truncate text-xs" style={{ color: 'var(--text-muted)' }}>{progress.current}</p>
+            )}
           </div>
         )}
 

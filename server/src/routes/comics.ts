@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify'
 import multipart from '@fastify/multipart'
 import { comicService } from '@/services/comicService.js'
 import { chapterService } from '@/services/chapterService.js'
-import { scanService } from '@/services/scanService.js'
+import { scanService, scanProgress } from '@/services/scanService.js'
 import { db, schema } from '@/db/index.js'
 import { eq, sql } from 'drizzle-orm'
 import fs from 'fs'
@@ -161,11 +161,16 @@ export async function comicRoutes(app: FastifyInstance) {
     }
     comicScanStatus = 'scanning'
     comicScanResult = null
+    scanProgress.phase = 'idle'
+    scanProgress.total = 0
+    scanProgress.processed = 0
+    scanProgress.current = ''
     scanService.scanLibrary(body?.namingMode, scope).then((result) => {
       comicScanResult = result
       comicScanStatus = 'done'
     }).catch(() => {
       comicScanStatus = 'idle'
+      scanProgress.phase = 'done'
     })
     return { status: 'scanning', message: '扫描已开始' }
   })
@@ -186,9 +191,9 @@ export async function comicRoutes(app: FastifyInstance) {
   app.get('/api/comics/scan/status', async () => {
     if (comicScanStatus === 'done') {
       comicScanStatus = 'idle'
-      return { status: 'done', result: comicScanResult }
+      return { status: 'done', result: comicScanResult, progress: scanProgress }
     }
-    return { status: comicScanStatus }
+    return { status: comicScanStatus, progress: scanProgress }
   })
 
   app.post('/api/comics/:id/refresh', async (request, reply) => {

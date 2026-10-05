@@ -3,10 +3,9 @@ import { useSearchParams } from 'react-router'
 import { ComicGrid } from '@/components/ComicGrid'
 import { CategoryTree } from '@/components/CategoryTree'
 import { TagCloud } from '@/components/TagCloud'
-import { SearchBar } from '@/components/SearchBar'
 import { useComicStore } from '@/stores/comicStore'
 import { useCategoryStore } from '@/stores/categoryStore'
-import { Filter, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
 export default function LibraryPage() {
   const [searchParams] = useSearchParams()
@@ -42,6 +41,11 @@ export default function LibraryPage() {
     if (Object.keys(params).length > 0) {
       setFilters(params)
     }
+    if (searchParams.get('showFilters') === '1') {
+      setShowFilters(true)
+    } else if (searchParams.get('showFilters') === '0') {
+      setShowFilters(false)
+    }
   }, [searchParams])
 
   const handleCategorySelect = (id: number) => {
@@ -64,10 +68,6 @@ export default function LibraryPage() {
     setFilters({ status: newStatus as 'ongoing' | 'completed' | 'unknown' | undefined, page: 1 })
   }
 
-  const handleSearch = (query: string) => {
-    setFilters({ query, page: 1 })
-  }
-
   const clearFilters = () => {
     setSelectedCategoryId(undefined)
     setSelectedTagIds([])
@@ -81,49 +81,21 @@ export default function LibraryPage() {
   return (
     <div className="flex gap-6">
       <div className="flex-1 space-y-4">
-        <div className="flex items-center gap-3">
-          <SearchBar onSearch={handleSearch} className="flex-1 max-w-md" />
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-            style={{
-              borderColor: showFilters || hasActiveFilters ? 'var(--primary)' : 'var(--border-light)',
-              backgroundColor: showFilters || hasActiveFilters ? 'rgba(var(--primary-rgb), 0.1)' : 'transparent',
-              color: showFilters || hasActiveFilters ? 'var(--primary)' : 'var(--text-secondary)'
-            }}
-            onMouseEnter={(e) => {
-              if (!showFilters && !hasActiveFilters) {
-                e.currentTarget.style.borderColor = 'var(--border-default)'
-                e.currentTarget.style.color = 'var(--text-primary)'
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!showFilters && !hasActiveFilters) {
-                e.currentTarget.style.borderColor = 'var(--border-light)'
-                e.currentTarget.style.color = 'var(--text-secondary)'
-              }
-            }}
-          >
-            <Filter className="h-4 w-4" />
-            筛选
-            {hasActiveFilters && (
-              <span className="rounded-full bg-primary px-1.5 py-0.5 text-xs" style={{ color: 'var(--text-primary)' }}>
-                {(selectedCategoryId ? 1 : 0) + selectedTagIds.length + (selectedStatus ? 1 : 0) + (selectedAuthor ? 1 : 0)}
-              </span>
-            )}
-          </button>
-        </div>
-
         {showFilters && (
           <div className="rounded-lg border p-4 space-y-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)' }}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>筛选条件</h3>
-              {hasActiveFilters && (
-                <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-primary hover:text-primary-hover">
-                  <X className="h-3 w-3" />
-                  清除全部
+              <div className="flex items-center gap-3">
+                {hasActiveFilters && (
+                  <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-primary hover:text-primary-hover">
+                    <X className="h-3 w-3" />
+                    清除全部
+                  </button>
+                )}
+                <button onClick={() => setShowFilters(false)} className="rounded p-0.5 transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }} title="收起筛选">
+                  <X className="h-4 w-4" />
                 </button>
-              )}
+              </div>
             </div>
 
             <div>

@@ -1,8 +1,18 @@
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, asc } from 'drizzle-orm'
 import { db, schema } from '@/db/index.js'
 import type { ReadingProgress, Comic } from '@/types/index.js'
 
 const { readingProgress, comics, chapters } = schema
+
+// 只有读完【最后一章】才标记为已完结；读到中间章节的最后一页不算完成，
+// 否则"继续阅读"会被误判为已完成而失效
+async function isLastChapter(comicId: number, chapterId: number): Promise<boolean> {
+  const rows = await db.select({ id: chapters.id }).from(chapters)
+    .where(eq(chapters.comicId, comicId))
+    .orderBy(asc(chapters.sortOrder))
+  if (rows.length === 0) return false
+  return rows[rows.length - 1]!.id === chapterId
+}
 
 export const progressService = {
   async getProgress(comicId: number): Promise<ReadingProgress | null> {
@@ -13,13 +23,15 @@ export const progressService = {
   async updateProgress(comicId: number, chapterId: number, currentPage: number, totalPages: number): Promise<ReadingProgress> {
     const existing = await this.getProgress(comicId)
     const now = new Date().toISOString()
+    const lastChapter = await isLastChapter(comicId, chapterId)
+    const isCompleted = lastChapter && currentPage >= totalPages
 
     if (existing) {
       await db.update(readingProgress).set({
         chapterId,
         currentPage,
         totalPages,
-        isCompleted: currentPage >= totalPages,
+        isCompleted,
         lastReadAt: now,
         updatedAt: now,
       }).where(eq(readingProgress.comicId, comicId))
@@ -31,7 +43,7 @@ export const progressService = {
         chapterId,
         currentPage,
         totalPages,
-        isCompleted: currentPage >= totalPages,
+        isCompleted,
         lastReadAt: now,
         createdAt: now,
         updatedAt: now,

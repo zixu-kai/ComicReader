@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Link, useLocation, Outlet } from 'react-router'
+import { useState, useEffect } from 'react'
+import { Link, useLocation, useNavigate, Outlet } from 'react-router'
 import {
   Home,
   Library,
   FolderTree,
   Bookmark,
   Dice5,
-  Search,
+  Filter,
   ScanLine,
   Settings,
   Menu,
@@ -16,10 +16,10 @@ import {
   Moon,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/appStore'
-import { comicsApi } from '@/services/api'
-import type { Comic } from '@/types'
+import { useComicStore } from '@/stores/comicStore'
 import clsx from 'clsx'
 import ScanDialog from '@/components/ScanDialog'
+import { SearchBar } from '@/components/SearchBar'
 
 const navItems = [
   { path: '/', label: '首页', icon: Home },
@@ -31,16 +31,12 @@ const navItems = [
 
 export default function Layout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { sidebarOpen, sidebarCollapsed, toggleSidebar, toggleSidebarCollapsed, settingsOpen, setSettingsOpen, theme, setTheme } = useAppStore()
+  const { filters, setFilters } = useComicStore()
   const [isMobile, setIsMobile] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchComics, setSearchComics] = useState<Comic[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [showDropdown, setShowDropdown] = useState(false)
   const [namingMode, setNamingMode] = useState(() => localStorage.getItem('namingMode') || 'folder')
   const [scanOpen, setScanOpen] = useState(false)
-  const searchRef = useRef<HTMLDivElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -55,54 +51,13 @@ export default function Layout() {
     }
   }, [isMobile])
 
-  const handleSearch = useCallback((query: string) => {
-    if (!query.trim()) {
-      setSearchComics([])
-      setShowDropdown(false)
-      return
-    }
-    setSearchLoading(true)
-    comicsApi.search(query, { pageSize: 5 }).then((res) => {
-      setSearchComics(Array.isArray(res) ? res : res.data || [])
-      setSearchLoading(false)
-      setShowDropdown(true)
-    }).catch(() => {
-      setSearchComics([])
-      setSearchLoading(false)
-      setShowDropdown(true)
-    })
-  }, [])
+  const handleGlobalSearch = (query: string) => {
+    setFilters({ query, page: 1 })
+    navigate('/library')
+  }
 
-  const handleSearchInput = useCallback((value: string) => {
-    setSearchQuery(value)
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current)
-    }
-    if (!value.trim()) {
-      setSearchComics([])
-      setShowDropdown(false)
-      return
-    }
-    debounceRef.current = setTimeout(() => {
-      handleSearch(value)
-    }, 300)
-  }, [handleSearch])
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setShowDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  useEffect(() => {
-    setShowDropdown(false)
-    setSearchQuery('')
-    setSearchComics([])
-  }, [location.pathname])
+  const hasActiveFilters = !!(filters.categoryId || filters.tagId || filters.status || filters.author || filters.query)
+  const activeFilterCount = (filters.categoryId ? 1 : 0) + (filters.tagId ? 1 : 0) + (filters.status ? 1 : 0) + (filters.author ? 1 : 0) + (filters.query ? 1 : 0)
 
   const isReaderPage = location.pathname.startsWith('/reader')
 
@@ -216,62 +171,36 @@ export default function Layout() {
             </button>
           )}
 
-          <div className="flex flex-1 items-center gap-2" ref={searchRef}>
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => handleSearchInput(e.target.value)}
-                onFocus={() => { if (searchQuery.trim() && searchComics.length > 0) setShowDropdown(true) }}
-                placeholder="搜索漫画..."
-                className="w-full rounded-lg py-2 pl-9 pr-9 text-sm outline-none focus:ring-1 focus:ring-primary"
-                style={{ border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-primary)' }}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => { setSearchQuery(''); setSearchComics([]); setShowDropdown(false) }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 hover:opacity-80"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <X className="h-4 w-4" />
-                </button>
+          <div className="flex flex-1 items-center gap-2">
+            <SearchBar
+              onSearch={handleGlobalSearch}
+              initialQuery={new URLSearchParams(location.search).get('query') || ''}
+              className="flex-1 max-w-md"
+            />
+            <button
+              onClick={() => {
+                if (location.pathname === '/library') {
+                  navigate(new URLSearchParams(location.search).get('showFilters') === '1' ? '/library?showFilters=0' : '/library?showFilters=1')
+                } else {
+                  navigate('/library?showFilters=1')
+                }
+              }}
+              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+              style={{
+                borderColor: hasActiveFilters ? 'var(--primary)' : 'var(--border-light)',
+                backgroundColor: hasActiveFilters ? 'rgba(var(--primary-rgb), 0.1)' : 'transparent',
+                color: hasActiveFilters ? 'var(--primary)' : 'var(--text-secondary)',
+              }}
+              title="筛选漫画"
+            >
+              <Filter className="h-4 w-4" />
+              筛选
+              {hasActiveFilters && (
+                <span className="rounded-full bg-primary px-1.5 py-0.5 text-xs" style={{ color: 'var(--text-primary)' }}>
+                  {activeFilterCount}
+                </span>
               )}
-              {showDropdown && searchQuery.trim() && (
-                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-lg shadow-xl" style={{ border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-surface)' }}>
-                  {searchLoading && (
-                    <div className="px-4 py-3 text-center text-xs" style={{ color: 'var(--text-muted)' }}>搜索中...</div>
-                  )}
-                  {!searchLoading && searchComics.length === 0 && (
-                    <div className="px-4 py-3 text-center text-xs" style={{ color: 'var(--text-muted)' }}>未找到结果</div>
-                  )}
-                  {searchComics.length > 0 && (
-                    <div>
-                      <div className="sticky top-0 px-3 py-1.5 text-xs font-medium" style={{ borderBottom: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)' }}>漫画</div>
-                      {searchComics.map((comic) => (
-                        <Link
-                          key={`comic-${comic.id}`}
-                          to={`/comic/${comic.id}`}
-                          className="flex items-center gap-3 px-3 py-2 transition-colors"
-                          style={{ color: 'var(--text-primary)' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}
-                        >
-                          <div className="h-10 w-8 shrink-0 overflow-hidden rounded" style={{ backgroundColor: 'var(--bg-surface-hover)' }}>
-                            <img src={`/api/comics/${comic.id}/cover`} alt="" className="h-full w-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm">{comic.title}</p>
-                            {comic.author && <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{comic.author}</p>}
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">

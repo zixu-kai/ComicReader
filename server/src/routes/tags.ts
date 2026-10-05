@@ -22,6 +22,16 @@ export async function tagRoutes(app: FastifyInstance) {
     return { success: true }
   })
 
+  app.put('/api/tags/reorder', async (request, reply) => {
+    const { ids } = (request.body as { ids?: number[] }) || {}
+    if (!Array.isArray(ids) || ids.length === 0) {
+      reply.code(400).send({ error: 'ids array required' })
+      return
+    }
+    await tagService.reorderTags(ids.map(Number))
+    return { success: true }
+  })
+
   app.post('/api/tags/batch-delete', async (request, reply) => {
     const { ids } = (request.body as { ids?: number[] }) || {}
     if (!Array.isArray(ids) || ids.length === 0) {

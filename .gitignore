@@ -6,6 +6,7 @@ target
 *.db-journal
 data/
 covers/
+comics/
 release/
 参考/
 *.tar
@@ -13,12 +14,12 @@ release/
 .DS_Store
 Thumbs.db
 
+# 前端构建产物（vite 输出到 server/static，由构建/Docker 生成）
+server/static/
+server/static
+
 # 打包发布脚本需要提交给 GitHub Actions，其余 scripts 文件忽略
 scripts/*
 !scripts/package-release.sh
 !scripts/package-release.ps1
 !scripts/nas-docker-compose.yaml
-
-# HarmonyOS/Hvigor 构建输出
-clients/harmony-native/.hvigor/
-clients/harmony-native/entry/build/

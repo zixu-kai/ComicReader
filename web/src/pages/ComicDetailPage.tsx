@@ -38,6 +38,7 @@ export default function ComicDetailPage() {
   const [coverUploading, setCoverUploading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editForm, setEditForm] = useState({ title: '', author: '', artist: '', description: '', status: 'unknown' as 'ongoing' | 'completed' | 'unknown', categoryIds: [] as number[], tagIds: [] as number[] })
+  const [deleting, setDeleting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -95,9 +96,15 @@ export default function ComicDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (confirm('确定要删除这部漫画吗？')) {
-      await deleteComic(comicId)
-      navigate('/library')
+    if (confirm('确定要删除这部漫画吗？\n\n将同时删除漫画文件夹及所有文件，且无法恢复。')) {
+      setDeleting(true)
+      try {
+        await deleteComic(comicId)
+        navigate('/library')
+      } catch {
+        setDeleting(false)
+        showToast('删除失败，请重试')
+      }
     }
   }
 
@@ -396,10 +403,13 @@ export default function ComicDetailPage() {
             </button>
             <button
               onClick={handleDelete}
-              className="flex items-center gap-2 rounded-lg border border-accent-red/30 px-4 py-2.5 text-sm text-accent-red hover:bg-accent-red/10"
+              disabled={deleting}
+              className="flex items-center gap-2 rounded-lg border border-accent-red/30 px-4 py-2.5 text-sm text-accent-red hover:bg-accent-red/10 disabled:opacity-50"
             >
-              <Trash2 className="h-4 w-4" />
-              删除
+              {deleting
+                ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent-red border-t-transparent" />
+                : <Trash2 className="h-4 w-4" />}
+              {deleting ? '删除中...' : '删除'}
             </button>
           </div>
         </div>
