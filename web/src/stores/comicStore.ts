@@ -15,7 +15,6 @@ interface ComicState {
   fetchComic: (id: number) => Promise<void>
   updateComic: (id: number, data: Partial<Comic>) => Promise<void>
   deleteComic: (id: number) => Promise<void>
-  scanLibrary: () => Promise<void>
   fetchRandomComics: (count?: number) => Promise<Comic[]>
   searchComics: (query: string) => Promise<void>
   setFilters: (filters: Partial<ComicQueryParams>) => void
@@ -79,17 +78,6 @@ export const useComicStore = create<ComicState>((set, get) => ({
       }))
     } catch (e) {
       set({ error: (e as Error).message })
-    }
-  },
-
-  scanLibrary: async () => {
-    set({ loading: true, error: null })
-    try {
-      await comicsApi.scan()
-      await get().fetchComics()
-      set({ loading: false })
-    } catch (e) {
-      set({ error: (e as Error).message, loading: false })
     }
   },
 

@@ -10,7 +10,7 @@ interface ScanDialogProps {
 }
 
 export default function ScanDialog({ open, onClose }: ScanDialogProps) {
-  const { scanLibrary } = useComicStore()
+  const { fetchComics } = useComicStore()
   const [folders, setFolders] = useState<string[]>([])
   const [scope, setScope] = useState<string>('all')
   const [scanning, setScanning] = useState(false)
@@ -40,10 +40,7 @@ export default function ScanDialog({ open, onClose }: ScanDialogProps) {
     setProgress(null)
     setMessage('扫描中...')
     try {
-      const namingMode = (() => {
-        try { return localStorage.getItem('namingMode') || 'folder' } catch { return 'folder' }
-      })()
-      await comicsApi.scan(namingMode, scope)
+      await comicsApi.scan(scope)
       const pollStatus = async () => {
         try {
           const status = await comicsApi.scanStatus()
@@ -56,7 +53,7 @@ export default function ScanDialog({ open, onClose }: ScanDialogProps) {
               setMessage('扫描完成')
             }
             setProgress(null)
-            scanLibrary()
+            fetchComics()
             setScanning(false)
           } else {
             setTimeout(pollStatus, 600)

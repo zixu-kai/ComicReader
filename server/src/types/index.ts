@@ -13,6 +13,7 @@ import type {
   ComicStatus,
   ReadingStatus,
   FileType,
+  AppSettings,
 } from 'shared/types'
 
 export type {
@@ -30,4 +31,5 @@ export type {
   ComicStatus,
   ReadingStatus,
   FileType,
+  AppSettings,
 }

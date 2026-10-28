@@ -20,7 +20,10 @@ import {
   X,
   Bookmark as BookmarkIcon,
   Download,
+  Hash,
+  Users,
 } from 'lucide-react'
+import { splitAuthors } from '@/utils/text'
 import type { Rating, ReadingProgress, Bookmark } from '@/types'
 
 export default function ComicDetailPage() {
@@ -231,14 +234,19 @@ export default function ComicDetailPage() {
           <h1 className="text-2xl font-bold md:text-3xl" style={{ color: 'var(--text-primary)' }}>{comic.title}</h1>
 
           {comic.author && (
-            <div className="flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+            <div className="flex flex-wrap items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
               <User className="h-4 w-4" />
-              <Link
-                to={`/library?author=${encodeURIComponent(comic.author)}`}
-                className="hover:text-primary transition-colors"
-              >
-                {comic.author}
-              </Link>
+              {splitAuthors(comic.author).map((name, i) => (
+                <span key={`${name}-${i}`} className="flex items-center gap-2">
+                  {i > 0 && <span style={{ color: 'var(--text-muted)' }}>、</span>}
+                  <Link
+                    to={`/library?author=${encodeURIComponent(name)}`}
+                    className="hover:text-primary transition-colors"
+                  >
+                    {name}
+                  </Link>
+                </span>
+              ))}
               {comic.artist && comic.artist !== comic.author && (
                 <span style={{ color: 'var(--text-muted)' }}>/ {comic.artist} (画师)</span>
               )}
@@ -297,6 +305,18 @@ export default function ComicDetailPage() {
               <span>{formatSize(comic.fileSize)}</span>
             </div>
             <span className="rounded px-2 py-0.5 text-xs uppercase" style={{ backgroundColor: 'var(--bg-surface)' }}>{comic.fileType}</span>
+            {comic.bookId && (
+              <div className="flex items-center gap-1">
+                <Hash className="h-3.5 w-3.5" />
+                <span>BookId: {comic.bookId}</span>
+              </div>
+            )}
+            {comic.ageRating && (
+              <div className="flex items-center gap-1">
+                <Users className="h-3.5 w-3.5" />
+                <span>年龄分级: {comic.ageRating}</span>
+              </div>
+            )}
           </div>
 
           {comicCategories.length > 0 && (

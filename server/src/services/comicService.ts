@@ -190,12 +190,30 @@ export const comicService = {
       if (comic.coverPath && fs.existsSync(comic.coverPath)) {
         fs.unlinkSync(comic.coverPath)
       }
+      // 扁平存储：漫画文件分散在各章节 filePath 上（[作者]名.cbz / [作者]名_2.cbz ...）
+      const chapterRows = await db.select({ filePath: schema.chapters.filePath }).from(schema.chapters).where(eq(schema.chapters.comicId, id))
+      for (const ch of chapterRows) {
+        try {
+          if (ch.filePath && fs.existsSync(ch.filePath)) {
+            const stat = fs.statSync(ch.filePath)
+            if (stat.isDirectory()) fs.rmSync(ch.filePath, { recursive: true, force: true })
+            else fs.unlinkSync(ch.filePath)
+          }
+        } catch (err) {
+          console.error(`Failed to delete chapter file ${ch.filePath}:`, err)
+        }
+      }
+      // 兼容旧结构：path 指向真实文件夹/文件时一并删除
       if (comic.path && fs.existsSync(comic.path)) {
-        const stat = fs.statSync(comic.path)
-        if (stat.isDirectory()) {
-          fs.rmSync(comic.path, { recursive: true, force: true })
-        } else {
-          fs.unlinkSync(comic.path)
+        try {
+          const stat = fs.statSync(comic.path)
+          if (stat.isDirectory()) {
+            fs.rmSync(comic.path, { recursive: true, force: true })
+          } else {
+            fs.unlinkSync(comic.path)
+          }
+        } catch (err) {
+          console.error(`Failed to delete comic path ${comic.path}:`, err)
         }
       }
     }
@@ -259,8 +277,8 @@ export const comicService = {
     return ids.length
   },
 
-  async scanLibrary(namingMode?: string, scope: string = 'all'): Promise<ScanResult> {
-    return scanService.scanLibrary(namingMode, scope)
+  async scanLibrary(scope: string = 'all'): Promise<ScanResult> {
+    return scanService.scanLibrary(scope)
   },
 
   async getRandomComics(count: number, categoryId?: number): Promise<Comic[]> {

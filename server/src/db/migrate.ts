@@ -147,6 +147,14 @@ const migrationStatements = [
 
 `ALTER TABLE tags ADD COLUMN "order" integer NOT NULL DEFAULT 0`,
 `UPDATE tags SET "order" = id WHERE "order" = 0`,
+
+`ALTER TABLE comics ADD COLUMN book_id text`,
+`ALTER TABLE comics ADD COLUMN age_rating text`,
+
+`CREATE TABLE IF NOT EXISTS settings (
+  key text PRIMARY KEY,
+  value text
+)`,
 ]
 
 export async function runMigrations() {

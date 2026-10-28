@@ -61,7 +61,7 @@ export default function CategoriesPage() {
   }
 
   const handleDeleteTag = async (id: number) => {
-    if (confirm('确定要删除此标签吗？\n\n相关漫画的 ComicInfo.xml 会同步移除该标签。')) {
+    if (confirm('确定要删除此标签吗？\n\n标签会立即从库中移除；CBZ 文件将在下次写入元数据（手动或定时）时才同步删除。')) {
       setDeletingTagId(id)
       try {
         await deleteTag(id)
@@ -110,7 +110,7 @@ export default function CategoriesPage() {
 
   const handleBatchDeleteTags = async () => {
     if (selectedTagIds.length === 0) return
-    if (confirm(`确定删除选中的 ${selectedTagIds.length} 个标签吗？\n\n相关漫画的 ComicInfo.xml 会同步移除这些标签。`)) {
+    if (confirm(`确定删除选中的 ${selectedTagIds.length} 个标签吗？\n\n标签会立即从库中移除；CBZ 文件将在下次写入元数据（手动或定时）时才同步删除。`)) {
       setDeletingBatch(true)
       try {
         await batchDeleteTags(selectedTagIds)
@@ -304,8 +304,11 @@ export default function CategoriesPage() {
       </div>
 
       <div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>标签管理</h2>
+        <h2 className="mb-1 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>标签管理</h2>
+        <p className="mb-3 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          只有此处存在的标签会被保留：CBZ 中不在此列表的标签不显示，写入元数据时会从 CBZ 中删除
+        </p>
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
           <div className="flex items-center gap-2">
             {selectedTagIds.length > 0 && (
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>已选 {selectedTagIds.length} 个</span>

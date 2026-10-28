@@ -2,17 +2,15 @@ import fs from 'fs'
 import path from 'path'
 import AdmZip from 'adm-zip'
 import sharp from 'sharp'
-import { XMLParser, XMLBuilder } from 'fast-xml-parser'
+import { XMLParser } from 'fast-xml-parser'
 import { eq, sql } from 'drizzle-orm'
 import { db, schema } from '@/db/index.js'
 import config from '@/config/index.js'
 import type { ScanResult, FileType } from '@/types/index.js'
-import { isImageFile, isComicArchive, getFileType, naturalSort, sanitizeTitle, cleanSeriesTitle } from '@/utils/index.js'
+import { isImageFile, isComicArchive, getFileType, naturalSort } from '@/utils/index.js'
 import { listRarImages, readRarImage } from './rarUtils.js'
 
-const { comics, chapters, comicCategories, comicTags } = schema
-
-const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif'])
+const { comics, chapters, comicCategories, comicTags, readingProgress } = schema
 
 interface ComicInfo {
   title?: string
@@ -25,12 +23,11 @@ interface ComicInfo {
   language?: string
   tags?: string[]
   categories?: string[]
-  volume?: number
-  chapterNumber?: number
-  manga?: string
   publisher?: string
   count?: number
   number?: number
+  bookId?: string
+  ageRating?: string
 }
 
 function parseComicInfoXml(xmlContent: string): ComicInfo {
@@ -54,8 +51,6 @@ function parseComicInfoXml(xmlContent: string): ComicInfo {
       status = 'ongoing'
     }
     const tags = parseListField(info.Tags || info.tags || info.Genre || info.genre) || []
-    // 不自动添加 Manga 标签（界面会忽略它，用户可手动管理）
-    const mangaVal = info.Manga || info.manga || undefined
     return {
       title: info.Title || info.title || undefined,
       series: info.Series || info.series || undefined,
@@ -67,12 +62,11 @@ function parseComicInfoXml(xmlContent: string): ComicInfo {
       language: info.LanguageISO || info.languageISO || info.Language || info.language || undefined,
       tags: tags.length > 0 ? tags : undefined,
       categories: parseListField(info.Categories || info.categories),
-      volume: parseInt(info.Volume || info.volume) || undefined,
-      chapterNumber: numberVal,
-      manga: mangaVal || undefined,
       publisher: info.Publisher || info.publisher || undefined,
       count: countVal,
       number: numberVal,
+      bookId: String(info.BookId || info.BookID || info.bookId || '') || undefined,
+      ageRating: info.AgeRating || info.ageRating || undefined,
     }
   } catch {
     return {}
@@ -84,25 +78,7 @@ function parseListField(value: string | undefined): string[] | undefined {
   return String(value).split(/[,;|]/).map(s => s.trim()).filter(Boolean)
 }
 
-function extractComicInfoFromFolder(folderPath: string): ComicInfo {
-  try {
-    const xmlPath = path.join(folderPath, 'ComicInfo.xml')
-    if (fs.existsSync(xmlPath)) {
-      const xmlContent = fs.readFileSync(xmlPath, 'utf-8')
-      return parseComicInfoXml(xmlContent)
-    }
-    const entries = fs.readdirSync(folderPath, { withFileTypes: true })
-    const archives = entries
-      .filter(e => e.isFile() && isComicArchive(e.name))
-      .sort((a, b) => naturalSort(a.name, b.name))
-    for (const archive of archives) {
-      const info = extractComicInfoFromArchive(path.join(folderPath, archive.name))
-      if (info.series || info.title) return info
-    }
-  } catch {}
-  return {}
-}
-
+// 只从 CBZ/ZIP 归档内部读取 ComicInfo.xml，不再读取/创建文件夹级 ComicInfo.xml
 function extractComicInfoFromArchive(archivePath: string): ComicInfo {
   try {
     const zip = new AdmZip(archivePath)
@@ -117,95 +93,44 @@ function extractComicInfoFromArchive(archivePath: string): ComicInfo {
   return {}
 }
 
-function writeComicInfoToFolder(folderPath: string, comicInfo: ComicInfo): void {
-  try {
-    const xmlPath = path.join(folderPath, 'ComicInfo.xml')
-    if (fs.existsSync(xmlPath)) return
+/**
+ * 解析漫画文件名规则：[作者]漫画名[_N].cbz
+ * - 作者 = 文件名第一个 [] 内的内容
+ * - 漫画名 = 第一个 [] 之后的部分（不含 []），去掉章节后缀 _N
+ * - _N 后缀 = 第 N 话（无后缀为第 1 话）
+ */
+export function parseComicFileName(filename: string): { author?: string; baseName: string; chapterNum: number } {
+  let name = path.basename(filename)
+  const ext = path.extname(name)
+  if (ext) name = name.slice(0, -ext.length)
 
-    const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true })
-    const infoObj: Record<string, string> = {}
-    if (comicInfo.series) infoObj.Series = comicInfo.series
-    if (comicInfo.title) infoObj.Title = comicInfo.title
-    if (comicInfo.author) infoObj.Writer = comicInfo.author
-    if (comicInfo.artist) infoObj.Penciller = comicInfo.artist
-    if (comicInfo.description) infoObj.Summary = comicInfo.description
-    if (comicInfo.year) infoObj.Year = String(comicInfo.year)
-    if (comicInfo.language) infoObj.LanguageISO = comicInfo.language
-    if (comicInfo.tags && comicInfo.tags.length > 0) infoObj.Tags = comicInfo.tags.join(', ')
-    if (comicInfo.categories && comicInfo.categories.length > 0) infoObj.Categories = comicInfo.categories.join(', ')
-    if (comicInfo.status) infoObj.PublishingStatus = comicInfo.status === 'ongoing' ? 'Ongoing' : comicInfo.status === 'completed' ? 'Completed' : 'Unknown'
-    if (comicInfo.publisher) infoObj.Publisher = comicInfo.publisher
-    if (comicInfo.manga) infoObj.Manga = comicInfo.manga
-    if (comicInfo.count) infoObj.Count = String(comicInfo.count)
-    if (comicInfo.number) infoObj.Number = String(comicInfo.number)
-
-    const xmlObj = { ComicInfo: infoObj }
-    const xmlContent = '<?xml version="1.0" encoding="UTF-8"?>\n' + builder.build(xmlObj)
-    fs.writeFileSync(xmlPath, xmlContent, 'utf-8')
-  } catch (err) {
-    console.error(`Failed to write ComicInfo.xml to ${folderPath}:`, err)
+  let author: string | undefined
+  const authorMatch = name.match(/^\[([^\]]*)\]\s*/)
+  if (authorMatch) {
+    author = authorMatch[1]!.trim() || undefined
+    name = name.slice(authorMatch[0].length)
   }
+
+  let chapterNum = 1
+  const chapterMatch = name.match(/^(.*?)\s*[_\-]\s*(\d+)$/)
+  if (chapterMatch && chapterMatch[1]) {
+    chapterNum = parseInt(chapterMatch[2]!, 10) || 1
+    name = chapterMatch[1]!
+  }
+
+  name = name.replace(/\s+/g, ' ').trim()
+  if (!name) name = path.basename(filename, ext)
+  return { author, baseName: name, chapterNum }
 }
 
-function ensureComicInfoInArchive(archivePath: string, comicInfo: ComicInfo): void {
-  try {
-    const zip = new AdmZip(archivePath)
-    const existingInfo = zip.getEntries().find(
-      e => !e.isDirectory && e.entryName.toLowerCase().endsWith('comicinfo.xml')
-    )
-    if (existingInfo) return
-
-    const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true })
-    const infoObj: Record<string, string> = {}
-    if (comicInfo.series) infoObj.Series = comicInfo.series
-    if (comicInfo.title) infoObj.Title = comicInfo.title
-    if (comicInfo.author) infoObj.Writer = comicInfo.author
-    if (comicInfo.artist) infoObj.Penciller = comicInfo.artist
-    if (comicInfo.description) infoObj.Summary = comicInfo.description
-    if (comicInfo.year) infoObj.Year = String(comicInfo.year)
-    if (comicInfo.language) infoObj.LanguageISO = comicInfo.language
-    if (comicInfo.tags && comicInfo.tags.length > 0) infoObj.Tags = comicInfo.tags.join(', ')
-    if (comicInfo.categories && comicInfo.categories.length > 0) infoObj.Categories = comicInfo.categories.join(', ')
-    if (comicInfo.publisher) infoObj.Publisher = comicInfo.publisher
-    if (comicInfo.manga) infoObj.Manga = comicInfo.manga
-    if (comicInfo.count) infoObj.Count = String(comicInfo.count)
-    if (comicInfo.number) infoObj.Number = String(comicInfo.number)
-
-    const xmlObj = { ComicInfo: infoObj }
-    const xmlContent = '<?xml version="1.0" encoding="UTF-8"?>\n' + builder.build(xmlObj)
-    zip.addFile('ComicInfo.xml', Buffer.from(xmlContent, 'utf-8'))
-    zip.writeZip(archivePath)
-  } catch (err) {
-    console.error(`Failed to write ComicInfo.xml to ${archivePath}:`, err)
-  }
+// 漫画分组键：同一目录下 作者+漫画名 相同的归档归为一部漫画
+function groupKeyOf(parentDir: string, author: string | undefined, baseName: string): string {
+  return `${path.resolve(parentDir)}|${(author || '').toLowerCase()}|${baseName.toLowerCase()}`
 }
 
-async function extractComicInfoFromCbz(filePath: string): Promise<{title?: string; author?: string; series?: string; summary?: string; genre?: string; status?: string; pageCount?: number}> {
-  try {
-    const zip = new AdmZip(filePath)
-    const comicInfoEntry = zip.getEntries().find(
-      e => !e.isDirectory && e.entryName.toLowerCase().endsWith('comicinfo.xml')
-    )
-    if (comicInfoEntry) {
-      const xmlContent = comicInfoEntry.getData().toString('utf-8')
-      const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-      })
-      const result = parser.parse(xmlContent)
-      const info = result.ComicInfo || result.comicinfo || {}
-      return {
-        title: info.Title || info.title || undefined,
-        author: info.Author || info.author || info.Writer || info.writer || undefined,
-        series: info.Series || info.series || undefined,
-        summary: info.Summary || info.summary || undefined,
-        genre: info.Genre || info.genre || undefined,
-        status: info.Status || info.status || undefined,
-        pageCount: parseInt(info.PageCount || info.pageCount) || undefined,
-      }
-    }
-  } catch {}
-  return {}
+// 合成漫画路径（不一定真实存在，作为 DB 唯一标识）：目录/[作者]漫画名
+function syntheticComicPath(parentDir: string, author: string | undefined, baseName: string): string {
+  return path.join(parentDir, author ? `[${author}]${baseName}` : baseName)
 }
 
 function listArchiveImages(archivePath: string): string[] {
@@ -235,43 +160,12 @@ async function generateCover(comicPath: string, comicId: number, fileType: FileT
     let imageBuffer: Buffer | null = null
 
     if (fileType === 'folder') {
-      const coverNames = ['cover.jpg', 'cover.jpeg', 'cover.png', 'cover.webp', 'Cover.jpg', 'Cover.jpeg', 'Cover.png', 'Cover.webp']
-      for (const coverName of coverNames) {
-        const coverPath = path.join(comicPath, coverName)
-        if (fs.existsSync(coverPath)) {
-          imageBuffer = fs.readFileSync(coverPath)
-          break
-        }
-      }
-      if (!imageBuffer) {
-        const images = listFolderImages(comicPath)
-        if (images.length > 0) {
-          imageBuffer = fs.readFileSync(path.join(comicPath, images[0]))
-        }
-      }
-      if (!imageBuffer) {
-        const subEntries = fs.readdirSync(comicPath, { withFileTypes: true })
-        const archives = subEntries
-          .filter(e => e.isFile() && isComicArchive(e.name))
-          .sort((a, b) => naturalSort(a.name, b.name))
-        if (archives.length > 0) {
-          const archivePath = path.join(comicPath, archives[0].name)
-          imageBuffer = await extractFirstImageFromArchive(archivePath)
-        }
+      const images = listFolderImages(comicPath)
+      if (images.length > 0) {
+        imageBuffer = fs.readFileSync(path.join(comicPath, images[0]!))
       }
     } else if (fileType === 'cbz' || fileType === 'zip' || fileType === 'cbr' || fileType === 'rar') {
-      const parentDir = path.dirname(comicPath)
-      const coverNames = ['cover.jpg', 'cover.jpeg', 'cover.png', 'cover.webp', 'Cover.jpg', 'Cover.jpeg', 'Cover.png', 'Cover.webp']
-      for (const coverName of coverNames) {
-        const coverPath = path.join(parentDir, coverName)
-        if (fs.existsSync(coverPath)) {
-          imageBuffer = fs.readFileSync(coverPath)
-          break
-        }
-      }
-      if (!imageBuffer) {
-        imageBuffer = await extractFirstImageFromArchive(comicPath)
-      }
+      imageBuffer = await extractFirstImageFromArchive(comicPath)
     }
 
     if (!imageBuffer) return null
@@ -285,21 +179,6 @@ async function generateCover(comicPath: string, comicId: number, fileType: FileT
       .resize(300, 450, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 80 })
       .toFile(coverPath)
-
-    try {
-      if (fileType === 'cbz' || fileType === 'zip') {
-        const dir = path.dirname(comicPath)
-        const destCoverPath = path.join(dir, 'cover.jpg')
-        if (!fs.existsSync(destCoverPath) && imageBuffer) {
-          fs.writeFileSync(destCoverPath, imageBuffer)
-        }
-      } else if (fileType === 'folder') {
-        const destCoverPath = path.join(comicPath, 'cover.jpg')
-        if (!fs.existsSync(destCoverPath) && imageBuffer) {
-          fs.writeFileSync(destCoverPath, imageBuffer)
-        }
-      }
-    } catch {}
 
     return coverPath
   } catch (err) {
@@ -326,7 +205,7 @@ async function extractFirstImageFromArchive(archivePath: string): Promise<Buffer
     const sortedEntries = entries
       .filter(e => !e.isDirectory && isImageFile(e.entryName))
       .sort((a, b) => naturalSort(a.entryName, b.entryName))
-    if (sortedEntries.length > 0) return sortedEntries[0].getData()
+    if (sortedEntries.length > 0) return sortedEntries[0]!.getData()
 
     return null
   } catch {
@@ -354,83 +233,7 @@ function getFileSize(itemPath: string): number {
   }
 }
 
-function determineChapters(comicPath: string, fileType: FileType): { filePath: string; title: string; volume: number | null; chapterNumber: number; sortOrder: number }[] {
-  if (fileType === 'cbz' || fileType === 'zip' || fileType === 'cbr' || fileType === 'rar') {
-    const title = sanitizeTitle(path.basename(comicPath))
-    return [{
-      filePath: comicPath,
-      title,
-      volume: null,
-      chapterNumber: 1,
-      sortOrder: 0,
-    }]
-  }
-
-  if (fileType === 'folder') {
-    const entries = fs.readdirSync(comicPath, { withFileTypes: true })
-
-    const archiveFiles = entries
-      .filter(e => e.isFile() && isComicArchive(e.name))
-      .map(e => e.name)
-      .sort(naturalSort)
-
-    const subFolders = entries
-      .filter(e => e.isDirectory())
-      .filter(e => {
-        const subPath = path.join(comicPath, e.name)
-        const subEntries = fs.readdirSync(subPath)
-        return subEntries.some(name => isImageFile(name))
-      })
-      .map(e => e.name)
-      .sort(naturalSort)
-
-    const directImages = entries
-      .filter(e => e.isFile() && isImageFile(e.name))
-
-    if (archiveFiles.length > 0 || subFolders.length > 0) {
-      const chapterList: { filePath: string; title: string; volume: number | null; chapterNumber: number; sortOrder: number }[] = []
-      let sortOrder = 0
-
-      for (const name of subFolders) {
-        chapterList.push({
-          filePath: path.join(comicPath, name),
-          title: sanitizeTitle(name),
-          volume: null,
-          chapterNumber: sortOrder + 1,
-          sortOrder,
-        })
-        sortOrder++
-      }
-
-      for (const name of archiveFiles) {
-        chapterList.push({
-          filePath: path.join(comicPath, name),
-          title: sanitizeTitle(name),
-          volume: null,
-          chapterNumber: sortOrder + 1,
-          sortOrder,
-        })
-        sortOrder++
-      }
-
-      return chapterList
-    }
-
-    if (directImages.length > 0) {
-      return [{
-        filePath: comicPath,
-        title: 'Chapter 1',
-        volume: null,
-        chapterNumber: 1,
-        sortOrder: 0,
-      }]
-    }
-  }
-
-  return []
-}
-
-async function countPages(filePath: string, fileType: FileType): Promise<number> {
+async function countPages(filePath: string): Promise<number> {
   const ext = path.extname(filePath).toLowerCase()
 
   if (ext === '.cbz' || ext === '.zip') {
@@ -448,13 +251,11 @@ async function countPages(filePath: string, fileType: FileType): Promise<number>
   return 0
 }
 
-async function ensureTag(name: string): Promise<number> {
+// 只查找标签管理中已存在的标签，不自动创建——CBZ 里的杂标签不入库，
+// 只有标签管理（分类与标签页）中存在的标签才会被保留、显示并写回 CBZ
+async function findTagId(name: string): Promise<number | null> {
   const [existing] = await db.select().from(schema.tags).where(eq(schema.tags.name, name))
-  if (existing) return existing.id
-
-  const [maxOrder] = await db.select({ maxOrder: sql<number>`COALESCE(MAX(${schema.tags.order}), 0)` }).from(schema.tags)
-  const [created] = await db.insert(schema.tags).values({ name, order: (maxOrder.maxOrder || 0) + 1 }).returning()
-  return created.id
+  return existing ? existing.id : null
 }
 
 async function ensureCategory(name: string): Promise<number> {
@@ -462,8 +263,15 @@ async function ensureCategory(name: string): Promise<number> {
   if (existing) return existing.id
 
   const maxOrder = await db.select({ maxOrder: sql<number>`COALESCE(MAX(${schema.categories.order}), 0)` }).from(schema.categories)
-  const result = await db.insert(schema.categories).values({ name, order: (maxOrder[0].maxOrder || 0) + 1 }).returning()
+  const result = await db.insert(schema.categories).values({ name, order: (maxOrder[0]!.maxOrder || 0) + 1 }).returning()
   return (result as any[])[0].id
+}
+
+interface ChapterSpec {
+  filePath: string
+  title: string
+  chapterNumber: number
+  sortOrder: number
 }
 
 interface ProcessItem {
@@ -471,10 +279,12 @@ interface ProcessItem {
   fileType: FileType
   title: string
   titleSort: string
+  author: string | null
   comicInfo: ComicInfo
   fileSize: number
-  chapterList: { filePath: string; title: string; volume: number | null; chapterNumber: number; sortOrder: number }[]
+  chapterList: ChapterSpec[]
   coverSource: { path: string; fileType: FileType }
+  latestMtime: string | null
 }
 
 // 扫描进度（模块级状态，供 /api/comics/scan/status 轮询返回）
@@ -485,12 +295,21 @@ export const scanProgress = {
   current: '',
 }
 
+function makeTitleSort(title: string): string {
+  return title.toLowerCase().replace(/^(the|a|an)\s+/i, '')
+}
+
 export const scanService = {
   /**
    * 扫描漫画库。scope 为 'all' 时扫描整个 comicsDir；否则只扫描 comicsDir 下指定的子文件夹
-   * （如按序号分目录 1/2/3，可只扫其中一个，避免扫描时间过长）
+   * （如 comics/1）。选择单个子文件夹时，其它子文件夹的漫画不做任何增删改。
+   *
+   * 文件组织规则（新）：
+   *   存储位置/1/[作者]漫画名.cbz      → 漫画《漫画名》第 1 话
+   *   存储位置/1/[作者]漫画名_2.cbz    → 第 2 话，归入《漫画名》
+   *   直接包含图片的文件夹              → 单章节漫画（第 1 话）
    */
-  async scanLibrary(namingMode: string = 'folder', scope: string = 'all'): Promise<ScanResult> {
+  async scanLibrary(scope: string = 'all'): Promise<ScanResult> {
     const result: ScanResult = { added: 0, updated: 0, removed: 0, errors: [] }
 
     scanProgress.phase = 'preparing'
@@ -518,7 +337,7 @@ export const scanService = {
       const existingComics = await db.select().from(comics)
       const existingPathMap = new Map(existingComics.map(c => [path.resolve(c.path), c]))
 
-      // 只处理当前扫描范围内的已有漫画，避免误删其它子文件夹的记录
+      // 只处理当前扫描范围内的已有漫画：scope 为单个子文件夹时，其它子文件夹的记录一律不动
       if (scoped) {
         const prefix = scanRoot + path.sep
         for (const p of [...existingPathMap.keys()]) {
@@ -528,189 +347,182 @@ export const scanService = {
         }
       }
 
-      const entries = fs.readdirSync(scanRoot, { withFileTypes: true })
-      const scannedPaths = new Set<string>()
-
-      const standaloneArchives: { name: string; fullPath: string }[] = []
-      const directoryEntries: { name: string; fullPath: string }[] = []
-      const collectionFolders: string[] = []
-
-      for (const entry of entries) {
-        const fullPath = path.resolve(path.join(scanRoot, entry.name))
-
-        if (entry.isFile() && isComicArchive(entry.name)) {
-          standaloneArchives.push({ name: entry.name, fullPath })
-        } else if (entry.isDirectory()) {
-          const subEntries = fs.readdirSync(fullPath, { withFileTypes: true })
-          const hasImages = subEntries.some(e => e.isFile() && isImageFile(e.name))
-          const hasArchives = subEntries.some(e => e.isFile() && isComicArchive(e.name))
-          const hasSubFolders = subEntries.some(e => e.isDirectory())
-
-          if (hasImages || hasArchives) {
-            // 直接包含图片/归档的文件夹 = 一部漫画
-            directoryEntries.push({ name: entry.name, fullPath })
-          } else if (hasSubFolders) {
-            // 集合文件夹（如按序号分目录 1/2/3）：递归把里面的子文件夹/归档当作漫画
-            collectionFolders.push(fullPath)
-          }
+      // 标题+作者 索引：旧结构（文件夹漫画）重扫成新结构时按标题复用记录，保留评分/进度/收藏
+      const normTitle = (t: string) => t.replace(/^\[[^\]]*\]\s*/, '').trim().toLowerCase()
+      const existingByTitleAuthor = new Map<string, typeof existingComics[number]>()
+      for (const c of existingPathMap.values()) {
+        const key = `${normTitle(c.title)}|${(c.author || '').toLowerCase()}`
+        if (!existingByTitleAuthor.has(key)) existingByTitleAuthor.set(key, c)
+        if (!c.author) {
+          const keyNoAuthor = `${normTitle(c.title)}|`
+          if (!existingByTitleAuthor.has(keyNoAuthor)) existingByTitleAuthor.set(keyNoAuthor, c)
         }
       }
 
-      // 展开集合文件夹（只展开一层，匹配"序号目录下是漫画"的组织方式）
-      for (const collectionPath of collectionFolders) {
-        const innerEntries = fs.readdirSync(collectionPath, { withFileTypes: true })
-        for (const inner of innerEntries) {
-          const innerPath = path.resolve(path.join(collectionPath, inner.name))
-          if (inner.isFile() && isComicArchive(inner.name)) {
-            standaloneArchives.push({ name: inner.name, fullPath: innerPath })
-          } else if (inner.isDirectory()) {
-            const subEntries = fs.readdirSync(innerPath, { withFileTypes: true })
+      const findExisting = (comicPath: string, title: string, author: string | null) =>
+        existingPathMap.get(path.resolve(comicPath))
+          || existingByTitleAuthor.get(`${normTitle(title)}|${(author || '').toLowerCase()}`)
+          || (!author ? existingByTitleAuthor.get(`${normTitle(title)}|`) : undefined)
+
+      // ---- 收集扫描条目 ----
+      // 归档文件按 (目录, 作者, 漫画名) 分组；直接含图片的文件夹为单章节漫画
+      const archiveFiles: { name: string; fullPath: string; parentDir: string }[] = []
+      const imageFolders: { name: string; fullPath: string }[] = []
+
+      const collect = (dir: string, depth: number) => {
+        let entries: fs.Dirent[]
+        try {
+          entries = fs.readdirSync(dir, { withFileTypes: true })
+        } catch {
+          return
+        }
+        for (const entry of entries) {
+          const fullPath = path.resolve(path.join(dir, entry.name))
+          if (entry.isFile() && isComicArchive(entry.name)) {
+            archiveFiles.push({ name: entry.name, fullPath, parentDir: dir })
+          } else if (entry.isDirectory()) {
+            let subEntries: fs.Dirent[] = []
+            try {
+              subEntries = fs.readdirSync(fullPath, { withFileTypes: true })
+            } catch { continue }
             const hasImages = subEntries.some(e => e.isFile() && isImageFile(e.name))
             const hasArchives = subEntries.some(e => e.isFile() && isComicArchive(e.name))
             const hasSubFolders = subEntries.some(e => e.isDirectory())
-            if (hasImages || hasArchives || hasSubFolders) {
-              directoryEntries.push({ name: inner.name, fullPath: innerPath })
+
+            if (hasImages) {
+              // 直接包含图片的文件夹 = 一部单章节漫画
+              imageFolders.push({ name: entry.name, fullPath })
+            } else if (hasArchives) {
+              // 文件夹内的归档同样按扁平规则分组（[作者]名[_N]）
+              collectArchivesOnly(fullPath)
+            } else if (hasSubFolders && depth < 2) {
+              // 集合文件夹（如序号目录）：递归展开
+              collect(fullPath, depth + 1)
             }
           }
         }
       }
 
-      const archivesByParentDir = new Map<string, { name: string; fullPath: string }[]>()
-      for (const archive of standaloneArchives) {
-        const parentDir = path.dirname(archive.fullPath)
-        if (!archivesByParentDir.has(parentDir)) {
-          archivesByParentDir.set(parentDir, [])
+      const collectArchivesOnly = (dir: string) => {
+        let entries: fs.Dirent[] = []
+        try {
+          entries = fs.readdirSync(dir, { withFileTypes: true })
+        } catch { return }
+        for (const entry of entries) {
+          const fullPath = path.resolve(path.join(dir, entry.name))
+          if (entry.isFile() && isComicArchive(entry.name)) {
+            archiveFiles.push({ name: entry.name, fullPath, parentDir: dir })
+          }
         }
-        archivesByParentDir.get(parentDir)!.push(archive)
+      }
+
+      collect(scanRoot, 0)
+
+      // ---- 归档按 [作者]漫画名 分组 ----
+      const groups = new Map<string, { parentDir: string; author?: string; baseName: string; files: { name: string; fullPath: string; chapterNum: number }[] }>()
+      for (const file of archiveFiles) {
+        const parsed = parseComicFileName(file.name)
+        const key = groupKeyOf(file.parentDir, parsed.author, parsed.baseName)
+        if (!groups.has(key)) {
+          groups.set(key, { parentDir: file.parentDir, author: parsed.author, baseName: parsed.baseName, files: [] })
+        }
+        groups.get(key)!.files.push({ name: file.name, fullPath: file.fullPath, chapterNum: parsed.chapterNum })
       }
 
       const itemsToProcess: ProcessItem[] = []
-      const skippedUnchanged = { count: 0 }
+      const scannedPaths = new Set<string>()
+      let skippedUnchanged = 0
 
-      const isUnchanged = (comicPath: string): boolean => {
-        const existing = existingPathMap.get(comicPath)
-        if (!existing) return false
-        try {
-          const currentStat = fs.statSync(comicPath)
-          const lastModified = currentStat.mtime.toISOString()
-          if (lastModified <= existing.updatedAt) {
-            skippedUnchanged.count++
-            return true
-          }
-        } catch {}
-        return false
+      const computeLatestMtime = (paths: string[]): string | null => {
+        let latest: string | null = null
+        for (const p of paths) {
+          try {
+            const m = fs.statSync(p).mtime.toISOString()
+            if (!latest || m > latest) latest = m
+          } catch {}
+        }
+        return latest
       }
 
-      for (const [parentDir, archives] of archivesByParentDir) {
-        if (archives.length > 1) {
-          if (isUnchanged(parentDir)) {
-            scannedPaths.add(parentDir)
+      for (const group of groups.values()) {
+        group.files.sort((a, b) => a.chapterNum - b.chapterNum || naturalSort(a.name, b.name))
+        const comicPath = syntheticComicPath(group.parentDir, group.author, group.baseName)
+        const existing = findExisting(comicPath, group.baseName, group.author || null)
+
+        const chapterPaths = group.files.map(f => f.fullPath)
+        const latestMtime = computeLatestMtime(chapterPaths)
+
+        if (existing) {
+          scannedPaths.add(path.resolve(existing.path))
+          const existingChapterCount = (await db.select({ count: sql<number>`count(*)` }).from(chapters).where(eq(chapters.comicId, existing.id)))[0]!.count
+          if (latestMtime && latestMtime <= existing.updatedAt && existingChapterCount === group.files.length) {
+            skippedUnchanged++
+            scannedPaths.add(path.resolve(comicPath))
             continue
           }
-          archives.sort((a, b) => naturalSort(a.name, b.name))
-
-          const firstArchiveInfo = extractComicInfoFromArchive(archives[0].fullPath)
-          const folderTitle = sanitizeTitle(path.basename(parentDir))
-          const rawTitle = namingMode === 'metadata'
-            ? (firstArchiveInfo.series || firstArchiveInfo.title || folderTitle)
-            : folderTitle
-          const title = cleanSeriesTitle(rawTitle)
-          const titleSort = title.toLowerCase().replace(/^(the|a|an)\s+/i, '')
-          const fileSize = archives.reduce((sum, a) => sum + getFileSize(a.fullPath), 0)
-
-          const chapterList = archives.map((archive, index) => ({
-            filePath: archive.fullPath,
-            title: sanitizeTitle(archive.name),
-            volume: null as number | null,
-            chapterNumber: index + 1,
-            sortOrder: index,
-          }))
-
-          const firstArchiveFileType = getFileType(archives[0].name)
-
-          itemsToProcess.push({
-            comicPath: parentDir,
-            fileType: 'folder',
-            title,
-            titleSort,
-            comicInfo: firstArchiveInfo,
-            fileSize,
-            chapterList,
-            coverSource: { path: archives[0].fullPath, fileType: firstArchiveFileType },
-          })
-        } else {
-          const archive = archives[0]
-          const comicPath = archive.fullPath
-          if (isUnchanged(comicPath)) {
-            scannedPaths.add(comicPath)
-            continue
-          }
-          const fileType = getFileType(archive.name)
-          const comicInfo = extractComicInfoFromArchive(comicPath)
-          const fileTitle = sanitizeTitle(archive.name)
-
-          let finalTitle = fileTitle
-          if (fileType === 'cbz') {
-            try {
-              const cbzInfo = await extractComicInfoFromCbz(comicPath)
-              if (cbzInfo.title || cbzInfo.series) {
-                finalTitle = cbzInfo.title || cbzInfo.series || fileTitle
-              }
-            } catch {}
-          }
-
-          const rawTitle = namingMode === 'metadata'
-            ? (comicInfo.series || comicInfo.title || finalTitle)
-            : finalTitle
-          const title = cleanSeriesTitle(rawTitle)
-          const titleSort = title.toLowerCase().replace(/^(the|a|an)\s+/i, '')
-          const fileSize = getFileSize(comicPath)
-          const chapterList = determineChapters(comicPath, fileType)
-
-          itemsToProcess.push({
-            comicPath,
-            fileType,
-            title,
-            titleSort,
-            comicInfo,
-            fileSize,
-            chapterList,
-            coverSource: { path: comicPath, fileType },
-          })
         }
-      }
 
-      for (const dir of directoryEntries) {
-        const comicPath = dir.fullPath
-        if (isUnchanged(comicPath)) {
-          scannedPaths.add(comicPath)
-          continue
-        }
-        const fileType: FileType = 'folder'
-        const comicInfo = extractComicInfoFromFolder(comicPath)
-        const folderTitle = sanitizeTitle(dir.name)
-        const rawTitle = namingMode === 'metadata'
-          ? (comicInfo.series || comicInfo.title || folderTitle)
-          : folderTitle
-        const title = cleanSeriesTitle(rawTitle)
-        const titleSort = title.toLowerCase().replace(/^(the|a|an)\s+/i, '')
-        const fileSize = getFileSize(comicPath)
-        const chapterList = determineChapters(comicPath, fileType)
+        const firstFile = group.files[0]!
+        const fileType = getFileType(firstFile.name)
+        const comicInfo = extractComicInfoFromArchive(firstFile.fullPath)
+        const title = group.baseName
+        const fileSize = chapterPaths.reduce((sum, p) => sum + getFileSize(p), 0)
+
+        const chapterList: ChapterSpec[] = group.files.map((f, idx) => ({
+          filePath: f.fullPath,
+          title: `第${f.chapterNum}话`,
+          chapterNumber: f.chapterNum,
+          sortOrder: idx,
+        }))
 
         itemsToProcess.push({
           comicPath,
           fileType,
           title,
-          titleSort,
+          titleSort: makeTitleSort(title),
+          author: group.author || null,
           comicInfo,
           fileSize,
           chapterList,
-          coverSource: { path: comicPath, fileType },
+          coverSource: { path: firstFile.fullPath, fileType },
+          latestMtime,
         })
       }
 
-      if (skippedUnchanged.count > 0) {
-        console.log(`[Scan] Skipped ${skippedUnchanged.count} unchanged comics`)
+      // ---- 图片文件夹（单章节漫画） ----
+      for (const dir of imageFolders) {
+        const comicPath = dir.fullPath
+        const parsed = parseComicFileName(dir.name)
+        const existing = findExisting(comicPath, parsed.baseName, parsed.author || null)
+
+        const latestMtime = computeLatestMtime([comicPath])
+
+        if (existing) {
+          scannedPaths.add(path.resolve(existing.path))
+          if (latestMtime && latestMtime <= existing.updatedAt) {
+            skippedUnchanged++
+            scannedPaths.add(path.resolve(comicPath))
+            continue
+          }
+        }
+
+        const title = parsed.baseName
+        itemsToProcess.push({
+          comicPath,
+          fileType: 'folder',
+          title,
+          titleSort: makeTitleSort(title),
+          author: parsed.author || null,
+          comicInfo: {},
+          fileSize: getFileSize(comicPath),
+          chapterList: [{ filePath: comicPath, title: '第1话', chapterNumber: 1, sortOrder: 0 }],
+          coverSource: { path: comicPath, fileType: 'folder' },
+          latestMtime,
+        })
+      }
+
+      if (skippedUnchanged > 0) {
+        console.log(`[Scan] Skipped ${skippedUnchanged} unchanged comics`)
       }
 
       scanProgress.phase = 'processing'
@@ -718,70 +530,96 @@ export const scanService = {
       scanProgress.processed = 0
 
       for (const item of itemsToProcess) {
-        scannedPaths.add(item.comicPath)
         scanProgress.current = item.title
+        scannedPaths.add(path.resolve(item.comicPath))
 
         try {
-          const existing = existingPathMap.get(item.comicPath)
+          const existing = findExisting(item.comicPath, item.title, item.author)
 
           let totalPages = 0
           for (const ch of item.chapterList) {
-            totalPages += await countPages(ch.filePath, item.fileType)
+            totalPages += await countPages(ch.filePath)
           }
 
           if (existing) {
-            const titleChanged = existing.title !== item.title
-            const hasMetadata = item.comicInfo.author || item.comicInfo.artist || item.comicInfo.description || item.comicInfo.tags?.length || item.comicInfo.categories?.length || item.comicInfo.publisher
-            const metadataMissing = !existing.author && !existing.artist && !existing.description
+            scannedPaths.add(path.resolve(existing.path))
 
-            if (titleChanged || (hasMetadata && metadataMissing)) {
-              let desc = item.comicInfo.description || existing.description
-              if (item.comicInfo.publisher && !desc?.includes(item.comicInfo.publisher)) {
-                const pubLine = `Publisher: ${item.comicInfo.publisher}`
-                desc = desc ? `${desc}\n${pubLine}` : pubLine
+            // 保留阅读进度：重建章节前记录进度对应的章节号，重建后恢复
+            const [progressRow] = await db.select().from(readingProgress).where(eq(readingProgress.comicId, existing.id))
+            let savedProgress: { chapterNumber: number; currentPage: number; totalPages: number; isCompleted: boolean; lastReadAt: string; createdAt: string } | null = null
+            if (progressRow) {
+              const [oldChapter] = await db.select({ chapterNumber: chapters.chapterNumber }).from(chapters).where(eq(chapters.id, progressRow.chapterId))
+              if (oldChapter) {
+                savedProgress = {
+                  chapterNumber: oldChapter.chapterNumber,
+                  currentPage: progressRow.currentPage,
+                  totalPages: progressRow.totalPages,
+                  isCompleted: progressRow.isCompleted,
+                  lastReadAt: progressRow.lastReadAt,
+                  createdAt: progressRow.createdAt,
+                }
               }
-              await db.update(comics).set({
-                title: item.title,
-                titleSort: item.titleSort,
-                author: item.comicInfo.author || existing.author,
-                artist: item.comicInfo.artist || existing.artist,
-                description: desc,
-                status: (item.comicInfo.status as 'ongoing' | 'completed' | 'unknown') || existing.status,
-                year: item.comicInfo.year || existing.year,
-                language: item.comicInfo.language || existing.language,
-                pageCount: totalPages,
-                fileSize: item.fileSize,
-                updatedAt: new Date().toISOString(),
-              }).where(eq(comics.id, existing.id))
+            }
 
-              await db.delete(chapters).where(eq(chapters.comicId, existing.id))
+            await db.update(comics).set({
+              title: item.title,
+              titleSort: item.titleSort,
+              author: item.author || existing.author,
+              path: item.comicPath,
+              fileType: item.fileType,
+              artist: existing.artist || item.comicInfo.artist || null,
+              description: existing.description || item.comicInfo.description || null,
+              status: existing.status !== 'unknown' ? existing.status : ((item.comicInfo.status as 'ongoing' | 'completed' | 'unknown') || 'unknown'),
+              year: existing.year || item.comicInfo.year || null,
+              language: existing.language || item.comicInfo.language || null,
+              bookId: existing.bookId || item.comicInfo.bookId || null,
+              ageRating: existing.ageRating || item.comicInfo.ageRating || null,
+              pageCount: totalPages,
+              fileSize: item.fileSize,
+              updatedAt: new Date().toISOString(),
+            }).where(eq(comics.id, existing.id))
 
-              for (const ch of item.chapterList) {
-                const pageCount = await countPages(ch.filePath, item.fileType)
-                await db.insert(chapters).values({
+            await db.delete(chapters).where(eq(chapters.comicId, existing.id))
+
+            const newChapterIds = new Map<number, number>()
+            for (const ch of item.chapterList) {
+              const pageCount = await countPages(ch.filePath)
+              const [inserted] = await db.insert(chapters).values({
+                comicId: existing.id,
+                volume: null,
+                chapterNumber: ch.chapterNumber,
+                title: ch.title,
+                pageCount,
+                filePath: ch.filePath,
+                sortOrder: ch.sortOrder,
+              }).returning()
+              newChapterIds.set(ch.chapterNumber, inserted.id)
+            }
+
+            // 恢复阅读进度到同名章节
+            if (savedProgress) {
+              const newChapterId = newChapterIds.get(savedProgress.chapterNumber) ?? newChapterIds.get(1)
+              if (newChapterId) {
+                await db.delete(readingProgress).where(eq(readingProgress.comicId, existing.id))
+                await db.insert(readingProgress).values({
                   comicId: existing.id,
-                  volume: ch.volume,
-                  chapterNumber: ch.chapterNumber,
-                  title: ch.title,
-                  pageCount,
-                  filePath: ch.filePath,
-                  sortOrder: ch.sortOrder,
+                  chapterId: newChapterId,
+                  currentPage: savedProgress.currentPage,
+                  totalPages: savedProgress.totalPages,
+                  isCompleted: savedProgress.isCompleted,
+                  lastReadAt: savedProgress.lastReadAt,
+                  createdAt: savedProgress.createdAt,
+                  updatedAt: new Date().toISOString(),
                 })
               }
-
-              const coverPath = await generateCover(item.coverSource.path, existing.id, item.coverSource.fileType)
-              if (coverPath) {
-                await db.update(comics).set({ coverPath }).where(eq(comics.id, existing.id))
-              }
-
-              if (item.fileType === 'folder') {
-                writeComicInfoToFolder(item.comicPath, item.comicInfo)
-              } else if (item.fileType === 'cbz' || item.fileType === 'zip') {
-                ensureComicInfoInArchive(item.comicPath, item.comicInfo)
-              }
-
-              result.updated++
             }
+
+            const coverPath = await generateCover(item.coverSource.path, existing.id, item.coverSource.fileType)
+            if (coverPath) {
+              await db.update(comics).set({ coverPath }).where(eq(comics.id, existing.id))
+            }
+
+            result.updated++
           } else {
             let desc = item.comicInfo.description || null
             if (item.comicInfo.publisher && (!desc || !desc.includes(item.comicInfo.publisher))) {
@@ -791,12 +629,14 @@ export const scanService = {
             const [inserted] = await db.insert(comics).values({
               title: item.title,
               titleSort: item.titleSort,
-              author: item.comicInfo.author || null,
+              author: item.author || item.comicInfo.author || null,
               artist: item.comicInfo.artist || null,
               description: desc,
               status: (item.comicInfo.status as 'ongoing' | 'completed' | 'unknown') || 'unknown',
               year: item.comicInfo.year || null,
               language: item.comicInfo.language || null,
+              bookId: item.comicInfo.bookId || null,
+              ageRating: item.comicInfo.ageRating || null,
               path: item.comicPath,
               fileType: item.fileType,
               pageCount: totalPages,
@@ -806,10 +646,10 @@ export const scanService = {
             const comicId = inserted.id
 
             for (const ch of item.chapterList) {
-              const pageCount = await countPages(ch.filePath, item.fileType)
+              const pageCount = await countPages(ch.filePath)
               await db.insert(chapters).values({
                 comicId,
-                volume: ch.volume,
+                volume: null,
                 chapterNumber: ch.chapterNumber,
                 title: ch.title,
                 pageCount,
@@ -820,8 +660,10 @@ export const scanService = {
 
             if (item.comicInfo.tags && item.comicInfo.tags.length > 0) {
               for (const tagName of item.comicInfo.tags) {
-                const tagId = await ensureTag(tagName)
-                await db.insert(comicTags).values({ comicId, tagId })
+                const tagId = await findTagId(tagName)
+                if (tagId !== null) {
+                  await db.insert(comicTags).values({ comicId, tagId })
+                }
               }
             }
 
@@ -837,12 +679,6 @@ export const scanService = {
               await db.update(comics).set({ coverPath }).where(eq(comics.id, comicId))
             }
 
-            if (item.fileType === 'folder') {
-              writeComicInfoToFolder(item.comicPath, item.comicInfo)
-            } else if (item.fileType === 'cbz' || item.fileType === 'zip') {
-              ensureComicInfoInArchive(item.comicPath, item.comicInfo)
-            }
-
             result.added++
           }
         } catch (err) {
@@ -855,6 +691,7 @@ export const scanService = {
       scanProgress.phase = 'done'
       scanProgress.current = ''
 
+      // 仅删除当前扫描范围内、本次未扫到的记录
       for (const [comicPath, comic] of existingPathMap) {
         if (!scannedPaths.has(comicPath)) {
           await db.delete(comics).where(eq(comics.id, comic.id))
@@ -869,228 +706,145 @@ export const scanService = {
     return result
   },
 
-  async refreshComic(comicId: number, namingMode: string = 'folder'): Promise<{ updated: boolean; added: number; removed: number }> {
+  async refreshComic(comicId: number): Promise<{ updated: boolean; added: number; removed: number }> {
     const [comic] = await db.select().from(comics).where(eq(comics.id, comicId))
     if (!comic) throw new Error('Comic not found')
-
-    const comicPath = path.resolve(comic.path)
-    if (!fs.existsSync(comicPath)) {
-      return { updated: false, added: 0, removed: 0 }
-    }
 
     const fileType = comic.fileType as FileType
 
-    const currentStat = fs.statSync(comicPath)
-    const lastModified = currentStat.mtime.toISOString()
-    if (lastModified <= comic.updatedAt) {
+    // 图片文件夹漫画：直接重新统计
+    if (fileType === 'folder' && fs.existsSync(comic.path) && fs.statSync(comic.path).isDirectory()) {
+      const currentStat = fs.statSync(comic.path)
+      if (currentStat.mtime.toISOString() <= comic.updatedAt) {
+        return { updated: false, added: 0, removed: 0 }
+      }
+      const pageCount = listFolderImages(comic.path).length
+      await db.update(chapters).set({ pageCount, updatedAt: new Date().toISOString() })
+        .where(eq(chapters.comicId, comicId))
+      await db.update(comics).set({
+        pageCount,
+        fileSize: getFileSize(comic.path),
+        updatedAt: new Date().toISOString(),
+      }).where(eq(comics.id, comicId))
+      return { updated: true, added: 0, removed: 0 }
+    }
+
+    // 扁平归档漫画：根据第 1 话路径找到同组所有章节文件
+    const comicChapters = await db.select().from(chapters).where(eq(chapters.comicId, comicId))
+      .orderBy(chapters.sortOrder)
+    const firstChapter = comicChapters[0]
+    if (!firstChapter || !fs.existsSync(firstChapter.filePath)) {
       return { updated: false, added: 0, removed: 0 }
     }
 
-    let comicInfo: ComicInfo = {}
-    let chapterList: { filePath: string; title: string; volume: number | null; chapterNumber: number; sortOrder: number }[] = []
+    const parentDir = path.dirname(firstChapter.filePath)
+    const parsedFirst = parseComicFileName(path.basename(firstChapter.filePath))
+    const groupKey = groupKeyOf(parentDir, parsedFirst.author, parsedFirst.baseName)
 
-    if (fileType === 'folder') {
-      comicInfo = extractComicInfoFromFolder(comicPath)
-      chapterList = determineChapters(comicPath, fileType)
-    } else {
-      comicInfo = extractComicInfoFromArchive(comicPath)
-      chapterList = determineChapters(comicPath, fileType)
+    let dirEntries: fs.Dirent[] = []
+    try {
+      dirEntries = fs.readdirSync(parentDir, { withFileTypes: true })
+    } catch {
+      return { updated: false, added: 0, removed: 0 }
     }
 
-    const folderTitle = sanitizeTitle(path.basename(comicPath))
-    const rawTitle = namingMode === 'metadata'
-      ? (comicInfo.series || comicInfo.title || folderTitle)
-      : folderTitle
-    const title = cleanSeriesTitle(rawTitle)
+    const groupFiles: { name: string; fullPath: string; chapterNum: number }[] = []
+    for (const entry of dirEntries) {
+      if (!entry.isFile() || !isComicArchive(entry.name)) continue
+      const parsed = parseComicFileName(entry.name)
+      if (groupKeyOf(parentDir, parsed.author, parsed.baseName) === groupKey) {
+        groupFiles.push({ name: entry.name, fullPath: path.join(parentDir, entry.name), chapterNum: parsed.chapterNum })
+      }
+    }
+    groupFiles.sort((a, b) => a.chapterNum - b.chapterNum || naturalSort(a.name, b.name))
 
-    let totalPages = 0
-    for (const ch of chapterList) {
-      totalPages += await countPages(ch.filePath, fileType)
+    // 未变更判断：所有章节文件 mtime 都不晚于 updatedAt 且章节数一致
+    let latestMtime: string | null = null
+    for (const f of groupFiles) {
+      try {
+        const m = fs.statSync(f.fullPath).mtime.toISOString()
+        if (!latestMtime || m > latestMtime) latestMtime = m
+      } catch {}
+    }
+    if (latestMtime && latestMtime <= comic.updatedAt && groupFiles.length === comicChapters.length) {
+      return { updated: false, added: 0, removed: 0 }
     }
 
-    const existingChapters = await db.select().from(chapters).where(eq(chapters.comicId, comicId))
-    const existingChapterPaths = new Set(existingChapters.map(ch => ch.filePath))
+    const oldPaths = new Set(comicChapters.map(c => c.filePath))
+    const newPaths = new Set(groupFiles.map(f => f.fullPath))
     let added = 0
     let removed = 0
+    for (const p of newPaths) if (!oldPaths.has(p)) added++
+    for (const p of oldPaths) if (!newPaths.has(p)) removed++
 
-    const newChapterPaths = new Set(chapterList.map(ch => ch.filePath))
-    for (const ep of existingChapterPaths) {
-      if (!newChapterPaths.has(ep)) removed++
+    // 保留阅读进度
+    const [progressRow] = await db.select().from(readingProgress).where(eq(readingProgress.comicId, comicId))
+    let savedProgress: { chapterNumber: number; currentPage: number; totalPages: number; isCompleted: boolean; lastReadAt: string; createdAt: string } | null = null
+    if (progressRow) {
+      const oldCh = comicChapters.find(c => c.id === progressRow.chapterId)
+      if (oldCh) {
+        savedProgress = {
+          chapterNumber: oldCh.chapterNumber,
+          currentPage: progressRow.currentPage,
+          totalPages: progressRow.totalPages,
+          isCompleted: progressRow.isCompleted,
+          lastReadAt: progressRow.lastReadAt,
+          createdAt: progressRow.createdAt,
+        }
+      }
     }
-    for (const np of newChapterPaths) {
-      if (!existingChapterPaths.has(np)) added++
+
+    await db.delete(chapters).where(eq(chapters.comicId, comicId))
+
+    let totalPages = 0
+    const newChapterIds = new Map<number, number>()
+    for (let i = 0; i < groupFiles.length; i++) {
+      const f = groupFiles[i]!
+      const pageCount = await countPages(f.fullPath)
+      totalPages += pageCount
+      const [inserted] = await db.insert(chapters).values({
+        comicId,
+        volume: null,
+        chapterNumber: f.chapterNum,
+        title: `第${f.chapterNum}话`,
+        pageCount,
+        filePath: f.fullPath,
+        sortOrder: i,
+      }).returning()
+      newChapterIds.set(f.chapterNum, inserted.id)
     }
 
-    if (added > 0 || removed > 0 || title !== comic.title) {
-      await db.delete(chapters).where(eq(chapters.comicId, comicId))
-
-      for (const ch of chapterList) {
-        const pageCount = await countPages(ch.filePath, fileType)
-        await db.insert(chapters).values({
+    if (savedProgress) {
+      const newChapterId = newChapterIds.get(savedProgress.chapterNumber) ?? newChapterIds.get(1)
+      if (newChapterId) {
+        await db.delete(readingProgress).where(eq(readingProgress.comicId, comicId))
+        await db.insert(readingProgress).values({
           comicId,
-          volume: ch.volume,
-          chapterNumber: ch.chapterNumber,
-          title: ch.title,
-          pageCount,
-          filePath: ch.filePath,
-          sortOrder: ch.sortOrder,
+          chapterId: newChapterId,
+          currentPage: savedProgress.currentPage,
+          totalPages: savedProgress.totalPages,
+          isCompleted: savedProgress.isCompleted,
+          lastReadAt: savedProgress.lastReadAt,
+          createdAt: savedProgress.createdAt,
+          updatedAt: new Date().toISOString(),
         })
       }
+    }
 
-      await db.update(comics).set({
-        title,
-        titleSort: title.toLowerCase().replace(/^(the|a|an)\s+/i, ''),
-        pageCount: totalPages,
-        fileSize: getFileSize(comicPath),
-        updatedAt: new Date().toISOString(),
-      }).where(eq(comics.id, comicId))
+    const fileSize = groupFiles.reduce((sum, f) => sum + getFileSize(f.fullPath), 0)
+    await db.update(comics).set({
+      pageCount: totalPages,
+      fileSize,
+      updatedAt: new Date().toISOString(),
+    }).where(eq(comics.id, comicId))
 
-      const coverPath = await generateCover(comicPath, comicId, fileType)
+    if (groupFiles.length > 0) {
+      const coverPath = await generateCover(groupFiles[0]!.fullPath, comicId, getFileType(groupFiles[0]!.name))
       if (coverPath) {
         await db.update(comics).set({ coverPath }).where(eq(comics.id, comicId))
       }
-
-      return { updated: true, added, removed }
     }
 
-    await db.update(comics).set({ updatedAt: new Date().toISOString() }).where(eq(comics.id, comicId))
-    return { updated: false, added: 0, removed: 0 }
+    return { updated: true, added, removed }
   },
-
-  async updateComicInfo(comicId: number, data: { title?: string; author?: string; artist?: string; description?: string; status?: string; year?: number; tags?: string[]; categories?: string[] }): Promise<void> {
-    const [comic] = await db.select().from(comics).where(eq(comics.id, comicId))
-    if (!comic) throw new Error('Comic not found')
-
-    const chapterList = await db.select().from(chapters).where(eq(chapters.comicId, comicId))
-
-    for (const chapter of chapterList) {
-      const filePath = chapter.filePath
-      if (!filePath) continue
-      const ext = path.extname(filePath).toLowerCase()
-
-      if (ext === '.cbz' || ext === '.zip') {
-        try {
-          const zip = new AdmZip(filePath)
-
-          const existingInfo = zip.getEntries().find(
-            e => !e.isDirectory && e.entryName.toLowerCase().endsWith('comicinfo.xml')
-          )
-
-          let xmlContent: string
-          if (existingInfo) {
-            xmlContent = existingInfo.getData().toString('utf-8')
-          } else {
-            xmlContent = '<?xml version="1.0" encoding="utf-8"?>\n<ComicInfo>\n</ComicInfo>'
-          }
-
-          const newXml = mergeComicInfoData(xmlContent, data)
-
-          if (existingInfo) {
-            zip.updateFile(existingInfo, Buffer.from(newXml, 'utf-8'))
-          } else {
-            zip.addFile('ComicInfo.xml', Buffer.from(newXml, 'utf-8'))
-          }
-
-          zip.writeZip(filePath)
-        } catch (err) {
-          console.error(`Failed to update ComicInfo.xml in ${filePath}:`, err)
-        }
-      }
-    }
-
-    // 同步更新漫画文件夹根目录的 ComicInfo.xml，保证重新扫描后修改依然生效
-    try {
-      const comicPath = comic.path
-      if (comicPath && fs.existsSync(comicPath) && fs.statSync(comicPath).isDirectory()) {
-        const xmlPath = path.join(comicPath, 'ComicInfo.xml')
-        let xmlContent: string
-        if (fs.existsSync(xmlPath)) {
-          xmlContent = fs.readFileSync(xmlPath, 'utf-8')
-        } else {
-          xmlContent = '<?xml version="1.0" encoding="utf-8"?>\n<ComicInfo>\n</ComicInfo>'
-        }
-        const newXml = mergeComicInfoData(xmlContent, data)
-        fs.writeFileSync(xmlPath, newXml, 'utf-8')
-      }
-    } catch (err) {
-      console.error(`Failed to update ComicInfo.xml in ${comic.path}:`, err)
-    }
-  },
-
-  // 删除标签时，同步从该漫画所有 ComicInfo.xml（文件夹根目录 + 各章节 CBZ 内）移除对应标签名
-  async removeTagsFromComicInfo(comicId: number, tagNames: string[]): Promise<void> {
-    if (tagNames.length === 0) return
-    const [comic] = await db.select().from(comics).where(eq(comics.id, comicId))
-    if (!comic) return
-    const nameSet = new Set(tagNames.map(n => n.toLowerCase()))
-
-    const stripTags = (xmlContent: string): string => {
-      const parsed = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' }).parse(xmlContent)
-      const info = parsed.ComicInfo || parsed.comicinfo || {}
-      const current = parseListField(info.Tags || info.tags)
-      if (!current || current.length === 0) return xmlContent
-      const kept = current.filter(t => !nameSet.has(t.toLowerCase()))
-      return mergeComicInfoData(xmlContent, { tags: kept })
-    }
-
-    // 漫画文件夹根目录的 ComicInfo.xml
-    const comicPath = comic.path
-    if (comicPath && fs.existsSync(comicPath) && fs.statSync(comicPath).isDirectory()) {
-      const xmlPath = path.join(comicPath, 'ComicInfo.xml')
-      if (fs.existsSync(xmlPath)) {
-        try {
-          const content = fs.readFileSync(xmlPath, 'utf-8')
-          fs.writeFileSync(xmlPath, stripTags(content), 'utf-8')
-        } catch (err) {
-          console.error(`Failed to update ComicInfo.xml in ${xmlPath}:`, err)
-        }
-      }
-    }
-
-    // 各章节 CBZ / ZIP 内的 ComicInfo.xml
-    const chapterRows = await db.select().from(chapters).where(eq(chapters.comicId, comicId))
-    for (const chapter of chapterRows) {
-      const filePath = chapter.filePath
-      if (!filePath) continue
-      const ext = path.extname(filePath).toLowerCase()
-      if (ext !== '.cbz' && ext !== '.zip') continue
-      try {
-        const zip = new AdmZip(filePath)
-        const entry = zip.getEntries().find(e => !e.isDirectory && e.entryName.toLowerCase().endsWith('comicinfo.xml'))
-        if (!entry) continue
-        const newXml = stripTags(entry.getData().toString('utf-8'))
-        zip.updateFile(entry, Buffer.from(newXml, 'utf-8'))
-        zip.writeZip(filePath)
-      } catch (err) {
-        console.error(`Failed to update ComicInfo.xml in ${filePath}:`, err)
-      }
-    }
-  },
-}
-
-function mergeComicInfoData(xmlContent: string, data: { title?: string; author?: string; artist?: string; description?: string; status?: string; year?: number; tags?: string[]; categories?: string[] }): string {
-  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
-  const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true })
-
-  const parsed = parser.parse(xmlContent)
-  const info = parsed.ComicInfo || parsed.comicinfo || {}
-
-  if (data.title !== undefined) {
-    info.Title = data.title
-    // 重扫（元数据命名模式）优先读 Series，同步更新保证书名修改不丢失
-    info.Series = data.title
-  }
-  if (data.author !== undefined) info.Writer = data.author
-  if (data.artist !== undefined) info.Penciller = data.artist
-  if (data.description !== undefined) info.Summary = data.description
-  if (data.status !== undefined) {
-    const statusMap: Record<string, string> = { ongoing: 'Ongoing', completed: 'Completed', unknown: 'Unknown' }
-    info.PublishingStatus = statusMap[data.status] || data.status
-  }
-  if (data.year !== undefined) info.Year = String(data.year)
-  if (data.tags !== undefined) info.Tags = data.tags.join(', ')
-  if (data.categories !== undefined) info.Categories = data.categories.join(', ')
-
-  parsed.ComicInfo = info
-  return builder.build(parsed)
 }

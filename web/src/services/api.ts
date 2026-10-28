@@ -11,6 +11,7 @@ import type {
   ServerInfo,
   ScanResult,
   Annotation,
+  AppSettings,
 } from '@/types'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -87,13 +88,13 @@ export const comicsApi = {
   delete: (id: number) =>
     request<void>(`/comics/${id}`, { method: 'DELETE' }),
 
-  scan: (namingMode?: string, scope?: string) => request<{ status: string; message?: string }>('/comics/scan', { method: 'POST', body: JSON.stringify({ namingMode: namingMode || 'folder', scope: scope || 'all' }) }),
+  scan: (scope?: string) => request<{ status: string; message?: string }>('/comics/scan', { method: 'POST', body: JSON.stringify({ scope: scope || 'all' }) }),
 
   scanOptions: () => request<{ folders: string[] }>('/comics/scan/options'),
 
   scanStatus: () => request<{ status: string; result?: ScanResult; progress?: { phase: string; total: number; processed: number; current: string } }>('/comics/scan/status'),
 
-  refresh: (id: number, namingMode?: string) => request<{ updated: boolean; added: number; removed: number }>(`/comics/${id}/refresh`, { method: 'POST', body: JSON.stringify({ namingMode: namingMode || 'folder' }) }),
+  refresh: (id: number) => request<{ updated: boolean; added: number; removed: number }>(`/comics/${id}/refresh`, { method: 'POST' }),
 
   random: (count?: number) =>
     request<Comic[]>(`/comics/random${buildQuery({ count })}`),
@@ -269,6 +270,23 @@ export const annotationsApi = {
     request<Annotation>(`/annotations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) =>
     request<void>(`/annotations/${id}`, { method: 'DELETE' }),
+}
+
+export const settingsApi = {
+  get: () =>
+    request<AppSettings>('/settings'),
+
+  update: (data: Partial<AppSettings>) =>
+    request<AppSettings>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  writeMetadata: () =>
+    request<{ status: string }>('/settings/write-metadata', { method: 'POST', body: JSON.stringify({}) }),
+
+  writeMetadataStatus: () =>
+    request<{ running: boolean; total: number; processed: number; current: string }>('/settings/write-metadata/status'),
 }
 
 export const authApi = {

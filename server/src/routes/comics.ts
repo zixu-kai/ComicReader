@@ -4,14 +4,14 @@ import { comicService } from '@/services/comicService.js'
 import { chapterService } from '@/services/chapterService.js'
 import { scanService, scanProgress } from '@/services/scanService.js'
 import { db, schema } from '@/db/index.js'
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import fs from 'fs'
 import path from 'path'
 import sharp from 'sharp'
 import config from '@/config/index.js'
 import AdmZip from 'adm-zip'
 
-const { comics, tags, categories } = schema
+const { comics } = schema
 
 let comicScanStatus: 'idle' | 'scanning' | 'done' = 'idle'
 let comicScanResult: any = null
@@ -89,43 +89,11 @@ export async function comicRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const data = request.body as any
     const comicId = parseInt(id)
+    // 元数据只写入数据库缓存；写回 CBZ 由"设置 → 写入元数据到CBZ"（手动或定时）统一执行
     const comic = await comicService.updateComic(comicId, data)
     if (!comic) {
       reply.code(404).send({ error: 'Comic not found' })
       return
-    }
-    // 同步写回 ComicInfo.xml，保证编辑（书名/作者/简介/状态/标签/分类）重扫后仍生效
-    try {
-      const xmlData: { title?: string; author?: string; artist?: string; description?: string; status?: string; year?: number; tags?: string[]; categories?: string[] } = {}
-      if (data.title !== undefined) xmlData.title = data.title
-      if (data.author !== undefined) xmlData.author = data.author
-      if (data.artist !== undefined) xmlData.artist = data.artist
-      if (data.description !== undefined) xmlData.description = data.description
-      if (data.status !== undefined) xmlData.status = data.status
-      if (data.year !== undefined) xmlData.year = data.year
-      if (data.tagIds !== undefined) {
-        const tagIds = (data.tagIds as number[]).filter(t => typeof t === 'number')
-        if (tagIds.length > 0) {
-          const tagRows = await db.select({ name: tags.name }).from(tags).where(sql`${tags.id} IN (${sql.join(tagIds.map(t => sql`${t}`), sql`,` )})`)
-          xmlData.tags = tagRows.map(r => r.name)
-        } else {
-          xmlData.tags = []
-        }
-      }
-      if (data.categoryIds !== undefined) {
-        const catIds = (data.categoryIds as number[]).filter(c => typeof c === 'number')
-        if (catIds.length > 0) {
-          const catRows = await db.select({ name: categories.name }).from(categories).where(sql`${categories.id} IN (${sql.join(catIds.map(c => sql`${c}`), sql`,` )})`)
-          xmlData.categories = catRows.map(r => r.name)
-        } else {
-          xmlData.categories = []
-        }
-      }
-      if (Object.keys(xmlData).length > 0) {
-        await scanService.updateComicInfo(comicId, xmlData)
-      }
-    } catch (err) {
-      console.error('Failed to sync ComicInfo.xml:', err)
     }
     return comic
   })
@@ -140,7 +108,6 @@ export async function comicRoutes(app: FastifyInstance) {
       return
     }
     await comicService.updateComic(comicId, { title: data.title, author: data.author, artist: data.artist, description: data.description, status: (data.status as any) || undefined, year: data.year })
-    await scanService.updateComicInfo(comicId, data)
     return { success: true }
   })
 
@@ -165,7 +132,7 @@ export async function comicRoutes(app: FastifyInstance) {
     scanProgress.total = 0
     scanProgress.processed = 0
     scanProgress.current = ''
-    scanService.scanLibrary(body?.namingMode, scope).then((result) => {
+    scanService.scanLibrary(scope).then((result) => {
       comicScanResult = result
       comicScanStatus = 'done'
     }).catch(() => {
@@ -205,8 +172,7 @@ export async function comicRoutes(app: FastifyInstance) {
       return
     }
     try {
-      const namingMode = (request.body as { namingMode?: string } | undefined)?.namingMode || 'folder'
-      const result = await scanService.refreshComic(comicId, namingMode)
+      const result = await scanService.refreshComic(comicId)
       return result
     } catch (err) {
       reply.code(500).send({ error: 'Refresh failed', message: err instanceof Error ? err.message : String(err) })
@@ -222,24 +188,49 @@ export async function comicRoutes(app: FastifyInstance) {
     }
 
     const comicPath = comicData.path
-    if (!fs.existsSync(comicPath)) {
-      reply.code(404).send({ error: 'Comic path not found' })
-      return
+    // 漫画路径可能是合成路径（扁平归档分组），真实文件在各章节 filePath 上
+    const chapterRows = await chapterService.getChapters(parseInt(id))
+    const chapterFiles = chapterRows.map(c => c.filePath).filter(p => fs.existsSync(p) && fs.statSync(p).isFile())
+
+    if (fs.existsSync(comicPath)) {
+      const stat = fs.statSync(comicPath)
+      if (stat.isFile()) {
+        const ext = path.extname(comicPath).toLowerCase()
+        const fileName = `${comicData.title}${ext}`
+        reply.header('Content-Type', 'application/octet-stream')
+        reply.header('Content-Length', stat.size)
+        reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`)
+        return fs.createReadStream(comicPath)
+      }
+
+      if (stat.isDirectory()) {
+        const zip = new AdmZip()
+        zip.addLocalFolder(comicPath)
+        const zipBuffer = zip.toBuffer()
+        const fileName = `${comicData.title}.zip`
+        reply.header('Content-Type', 'application/zip')
+        reply.header('Content-Length', zipBuffer.length)
+        reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`)
+        reply.send(zipBuffer)
+        return
+      }
     }
 
-    const stat = fs.statSync(comicPath)
-    if (stat.isFile()) {
-      const ext = path.extname(comicPath).toLowerCase()
-      const fileName = `${comicData.title}${ext}`
+    if (chapterFiles.length === 1) {
+      const filePath = chapterFiles[0]!
+      const stat = fs.statSync(filePath)
+      const fileName = path.basename(filePath)
       reply.header('Content-Type', 'application/octet-stream')
       reply.header('Content-Length', stat.size)
       reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`)
-      return fs.createReadStream(comicPath)
+      return fs.createReadStream(filePath)
     }
 
-    if (stat.isDirectory()) {
+    if (chapterFiles.length > 1) {
       const zip = new AdmZip()
-      zip.addLocalFolder(comicPath)
+      for (const f of chapterFiles) {
+        zip.addLocalFile(f)
+      }
       const zipBuffer = zip.toBuffer()
       const fileName = `${comicData.title}.zip`
       reply.header('Content-Type', 'application/zip')
@@ -249,7 +240,7 @@ export async function comicRoutes(app: FastifyInstance) {
       return
     }
 
-    reply.code(500).send({ error: 'Unknown file type' })
+    reply.code(404).send({ error: 'Comic files not found' })
   })
 
   app.get('/api/comics/:id/cover', async (request, reply) => {

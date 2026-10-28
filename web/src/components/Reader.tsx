@@ -1,8 +1,10 @@
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import clsx from 'clsx'
 import { useReaderStore } from '@/stores/readerStore'
+import { useComicStore } from '@/stores/comicStore'
 import { useKeyboard } from '@/hooks/useKeyboard'
-import { chaptersApi, progressApi } from '@/services/api'
+import { chaptersApi, progressApi, settingsApi } from '@/services/api'
+import { splitAuthors } from '@/utils/text'
 import type { Chapter, ReadingDirection } from '@/types'
 import { useNavigate } from 'react-router'
 import { X, Settings, ChevronLeft, ChevronRight, Maximize, Minimize, Edit3, Trash2, ImagePlus, Save, RotateCcw, List, BookmarkPlus, Pencil } from 'lucide-react'
@@ -43,6 +45,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps) {
   const navigate = useNavigate()
+  const currentComic = useComicStore((s) => s.currentComic)
   const savedPrefs = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('ownShelfPrefs') || '{}') } catch { return {} }
   }, [])
@@ -82,6 +85,8 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
   })
 
   const boundaryTriggeredRef = useRef<'next' | 'prev' | null>(null)
+  const zoomInitRef = useRef(false)
+  const initialScrollDoneRef = useRef(false)
 
   const editModeRef = useRef(false)
   editModeRef.current = editMode
@@ -104,6 +109,15 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
 
   useEffect(() => {
     const initChapter = async () => {
+      // 初始缩放：每次进入阅读器时取"总设置"里的默认值
+      if (!zoomInitRef.current) {
+        zoomInitRef.current = true
+        try {
+          const s = await settingsApi.get()
+          if (s?.defaultZoom) setZoom(s.defaultZoom)
+        } catch {}
+      }
+
       let startPage: number | undefined
       const params = new URLSearchParams(window.location.search)
       const pageParam = params.get('page')
@@ -388,18 +402,45 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
     }
   }, [isScrollMode, handleNextChapter, handlePrevChapter])
 
-  const scrollToPage = useCallback((pageNum: number) => {
+  const scrollToPage = useCallback((pageNum: number, smooth = true) => {
     if (!scrollContainerRef.current) return
     const container = scrollContainerRef.current
     const imgs = container.querySelectorAll('[data-page-idx]')
     for (const img of imgs) {
       const idx = parseInt((img as HTMLElement).dataset.pageIdx || '1', 10)
       if (idx === pageNum) {
-        img.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        img.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' })
         break
       }
     }
   }, [])
+
+  // 图片懒加载会影响偏移量，多次重试直到页面高度稳定
+  const scrollToPageSettled = useCallback((pageNum: number) => {
+    scrollToPage(pageNum, false)
+    const t1 = setTimeout(() => scrollToPage(pageNum, false), 400)
+    const t2 = setTimeout(() => scrollToPage(pageNum, false), 1000)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [scrollToPage])
+
+  // 滚动模式：进入章节后定位到起始页（继续阅读/上一章末尾）
+  useEffect(() => {
+    if (!isScrollMode || editMode) return
+    if (initialScrollDoneRef.current) return
+    if (currentPage <= 1) {
+      initialScrollDoneRef.current = true
+      return
+    }
+    const timer = setTimeout(() => {
+      scrollToPageSettled(currentPage)
+      initialScrollDoneRef.current = true
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [isScrollMode, editMode, currentPage, scrollToPageSettled])
+
+  useEffect(() => {
+    initialScrollDoneRef.current = false
+  }, [chapterId])
 
   useKeyboard({
     onNextPage: () => { if (!editModeRef.current) handleNextPage() },
@@ -617,9 +658,9 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
                 )
               }
               return (
-                <div key={pageIdx} data-page-idx={pageIdx} className="w-full flex items-center justify-center" style={{ minHeight: '50vh' }}>
+                <div key={pageIdx} data-page-idx={pageIdx} className="block w-full">
                   {!imageErrors.has(pageIdx) ? (
-                    <img src={getPageImageUrl(pageIdx)} alt="" className="w-full object-contain" onError={() => setImageErrors((prev) => new Set(prev).add(pageIdx))} draggable={false} />
+                    <img src={getPageImageUrl(pageIdx)} alt="" className="block w-full h-auto" style={{ margin: 0 }} onError={() => setImageErrors((prev) => new Set(prev).add(pageIdx))} draggable={false} />
                   ) : (
                     <div className="flex h-64 w-full items-center justify-center text-sm" style={{ backgroundColor: '#1f2937', color: '#9ca3af' }}>第 {pageIdx} 页加载失败</div>
                   )}
@@ -719,6 +760,17 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
             <List className="h-3.5 w-3.5" />目录
           </h3>
 
+          {currentComic?.author && (
+            <div className="mb-3 flex flex-wrap items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+              <span>作者：</span>
+              {splitAuthors(currentComic.author).map((name, i) => (
+                <span key={`${name}-${i}`} className="rounded px-1.5 py-0.5" style={{ backgroundColor: 'var(--bg-surface-hover)', color: 'var(--text-secondary)' }}>
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
+
           {allChapters.length > 0 && (
             <div className="mb-3">
               <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>章节</p>
@@ -764,7 +816,11 @@ export function Reader({ comicId, chapterId, totalPages, onClose }: ReaderProps)
             {customToc.map((entry, i) => (
               <div key={i} className="flex items-center gap-1 group mb-0.5">
                 <button
-                  onClick={() => { goToPage(entry.page); setShowToc(false) }}
+                  onClick={() => {
+                    goToPage(entry.page)
+                    setShowToc(false)
+                    if (isScrollMode) setTimeout(() => scrollToPageSettled(entry.page), 50)
+                  }}
                   className="flex-1 text-left rounded px-2 py-1.5 text-xs truncate transition-colors"
                   style={{
                     backgroundColor: entry.page === currentPage ? 'rgba(var(--primary-rgb), 0.2)' : 'transparent',

@@ -17,6 +17,8 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '@/stores/appStore'
 import { useComicStore } from '@/stores/comicStore'
+import { settingsApi } from '@/services/api'
+import type { AppSettings } from '@/types'
 import clsx from 'clsx'
 import ScanDialog from '@/components/ScanDialog'
 import { SearchBar } from '@/components/SearchBar'
@@ -35,8 +37,50 @@ export default function Layout() {
   const { sidebarOpen, sidebarCollapsed, toggleSidebar, toggleSidebarCollapsed, settingsOpen, setSettingsOpen, theme, setTheme } = useAppStore()
   const { filters, setFilters } = useComicStore()
   const [isMobile, setIsMobile] = useState(false)
-  const [namingMode, setNamingMode] = useState(() => localStorage.getItem('namingMode') || 'folder')
   const [scanOpen, setScanOpen] = useState(false)
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null)
+  const [writeProgress, setWriteProgress] = useState<{ running: boolean; total: number; processed: number; current: string } | null>(null)
+  const [writeResult, setWriteResult] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    settingsApi.get().then(setAppSettings).catch(() => {})
+    settingsApi.writeMetadataStatus().then(setWriteProgress).catch(() => {})
+  }, [settingsOpen])
+
+  useEffect(() => {
+    if (!writeProgress?.running) return
+    const timer = setInterval(async () => {
+      try {
+        const s = await settingsApi.writeMetadataStatus()
+        setWriteProgress(s)
+        if (!s.running) {
+          setWriteResult(`已处理 ${s.processed}/${s.total} 部漫画`)
+          clearInterval(timer)
+        }
+      } catch {}
+    }, 800)
+    return () => clearInterval(timer)
+  }, [writeProgress?.running])
+
+  const updateAppSettings = async (patch: Partial<AppSettings>) => {
+    try {
+      const s = await settingsApi.update(patch)
+      setAppSettings(s)
+    } catch {}
+  }
+
+  const handleWriteMetadata = async () => {
+    setWriteResult(null)
+    try {
+      await settingsApi.writeMetadata()
+      const s = await settingsApi.writeMetadataStatus()
+      setWriteProgress(s)
+      if (!s.running) setWriteResult(`已处理 ${s.processed}/${s.total} 部漫画`)
+    } catch (e) {
+      setWriteResult('写入失败: ' + (e as Error).message)
+    }
+  }
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -273,37 +317,67 @@ export default function Layout() {
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>在 .env 文件中修改 COMICS_DIR</p>
                 </div>
                 <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '0.75rem' }}>
-                  <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>命名方式</h3>
-                  <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>扫描时如何命名漫画</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => { localStorage.setItem('namingMode', 'folder'); setNamingMode('folder') }}
-                      className={clsx(
-                        'rounded-lg border px-3 py-2 text-xs transition-colors',
-                        namingMode !== 'metadata'
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : ''
-                      )}
-                      style={namingMode === 'metadata' ? { borderColor: 'var(--border-light)', color: 'var(--text-secondary)' } : undefined}
-                    >
-                      文件夹名
-                      <p className="mt-0.5 text-[10px] opacity-60">使用文件夹/文件名</p>
-                    </button>
-                    <button
-                      onClick={() => { localStorage.setItem('namingMode', 'metadata'); setNamingMode('metadata') }}
-                      className={clsx(
-                        'rounded-lg border px-3 py-2 text-xs transition-colors',
-                        namingMode === 'metadata'
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : ''
-                      )}
-                      style={namingMode !== 'metadata' ? { borderColor: 'var(--border-light)', color: 'var(--text-secondary)' } : undefined}
-                    >
-                      元数据名
-                      <p className="mt-0.5 text-[10px] opacity-60">使用ComicInfo标题</p>
-                    </button>
+                  <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>阅读初始缩放</h3>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={25}
+                      max={200}
+                      step={5}
+                      value={appSettings?.defaultZoom ?? 50}
+                      onChange={(e) => setAppSettings((prev) => prev ? { ...prev, defaultZoom: parseInt(e.target.value, 10) } : prev)}
+                      onMouseUp={(e) => updateAppSettings({ defaultZoom: parseInt((e.target as HTMLInputElement).value, 10) })}
+                      onTouchEnd={(e) => updateAppSettings({ defaultZoom: parseInt((e.target as HTMLInputElement).value, 10) })}
+                      className="flex-1 accent-primary"
+                    />
+                    <span className="w-12 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>{appSettings?.defaultZoom ?? 50}%</span>
                   </div>
+                  <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>默认 50%，进入阅读器时使用该缩放</p>
                 </div>
+
+                <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '0.75rem' }}>
+                  <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>写入元数据到 CBZ</h3>
+                  <div className="mb-2 flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <label className="flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={!!appSettings?.metadataAutoWriteTime}
+                        onChange={(e) => updateAppSettings({ metadataAutoWriteTime: e.target.checked ? (appSettings?.metadataAutoWriteTime || '03:00') : '' })}
+                        className="accent-primary"
+                      />
+                      每天定时写入
+                    </label>
+                    {!!appSettings?.metadataAutoWriteTime && (
+                      <input
+                        type="time"
+                        value={appSettings.metadataAutoWriteTime}
+                        onChange={(e) => e.target.value && updateAppSettings({ metadataAutoWriteTime: e.target.value })}
+                        className="rounded border px-2 py-1 outline-none focus:border-primary"
+                        style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)' }}
+                      />
+                    )}
+                  </div>
+                  {appSettings?.metadataLastWriteAt && (
+                    <p className="mb-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      上次写入：{new Date(appSettings.metadataLastWriteAt).toLocaleString()}
+                    </p>
+                  )}
+                  <button
+                    onClick={handleWriteMetadata}
+                    disabled={!!writeProgress?.running}
+                    className="w-full rounded-lg border px-4 py-2 text-sm transition-colors disabled:opacity-50"
+                    style={{ borderColor: 'rgba(var(--primary-rgb), 0.4)', color: 'var(--primary)' }}
+                  >
+                    {writeProgress?.running ? `写入中 ${writeProgress.processed}/${writeProgress.total}` : '立即写入元数据到 CBZ'}
+                  </button>
+                  {writeProgress?.running && (
+                    <p className="mt-1 truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>{writeProgress.current}</p>
+                  )}
+                  {writeResult && (
+                    <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>{writeResult}</p>
+                  )}
+                </div>
+
                 <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '0.75rem' }}>
                   <button
                     onClick={() => { setScanOpen(true); setSettingsOpen(false) }}

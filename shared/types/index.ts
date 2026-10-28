@@ -19,6 +19,8 @@ export interface Comic {
   pageCount: number
   coverPath: string | null
   fileSize: number
+  bookId: string | null
+  ageRating: string | null
   lastReadAt: string | null
   createdAt: string
   updatedAt: string
@@ -141,6 +143,13 @@ export interface Annotation {
   endOffset: number | null
   createdAt: string
   updatedAt: string
+}
+
+export interface AppSettings {
+  defaultZoom: number
+  /** 每天定时写入元数据的时间 'HH:MM'；空 = 关闭 */
+  metadataAutoWriteTime: string
+  metadataLastWriteAt: string | null
 }
 
 export interface AppInfo {

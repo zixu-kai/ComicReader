@@ -12,7 +12,9 @@ import { progressRoutes } from '@/routes/progress.js'
 import { systemRoutes } from '@/routes/system.js'
 import { bookmarkRoutes } from '@/routes/bookmarks.js'
 import { annotationRoutes } from '@/routes/annotations.js'
+import { settingsRoutes } from '@/routes/settings.js'
 import { authRoutes } from '@/routes/auth.js'
+import { startMetadataScheduler } from '@/services/settingsService.js'
 import config from '@/config/index.js'
 import { db, schema } from '@/db/index.js'
 import { runMigrations } from '@/db/migrate.js'
@@ -55,7 +57,10 @@ await app.register(progressRoutes)
 await app.register(systemRoutes)
 await app.register(bookmarkRoutes)
 await app.register(annotationRoutes)
+await app.register(settingsRoutes)
 await app.register(authRoutes)
+
+startMetadataScheduler()
 
 if (!fs.existsSync(config.coversDir)) {
   fs.mkdirSync(config.coversDir, { recursive: true })

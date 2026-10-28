@@ -17,4 +17,5 @@ export type {
   FileType,
   Annotation,
   AppInfo,
+  AppSettings,
 } from 'shared'

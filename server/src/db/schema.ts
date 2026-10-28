@@ -15,6 +15,8 @@ export const comics = sqliteTable('comics', {
   pageCount: integer('page_count').notNull().default(0),
   coverPath: text('cover_path'),
   fileSize: integer('file_size').notNull().default(0),
+  bookId: text('book_id'),
+  ageRating: text('age_rating'),
   lastReadAt: text('last_read_at'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
@@ -118,6 +120,11 @@ export const bookmarkComics = sqliteTable('bookmark_comics', {
   index('idx_bookmark_comics_bookmark').on(table.bookmarkId),
   uniqueIndex('idx_bookmark_comics_unique').on(table.bookmarkId, table.comicId),
 ])
+
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value'),
+})
 
 export const annotations = sqliteTable('annotations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
